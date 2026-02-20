@@ -1,0 +1,372 @@
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, FlatList, Pressable, Platform, Alert, RefreshControl,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons, Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import Colors from '@/constants/colors';
+import { useData } from '@/lib/data-context';
+import { formatDate, getInitials, getAvatarColor } from '@/lib/helpers';
+import { Job } from '@/lib/storage';
+
+const STATUS_CONFIG = {
+  pending: { label: 'Pending', color: Colors.warning, bg: '#FFF8E0' },
+  confirmed: { label: 'Confirmed', color: Colors.success, bg: '#E8F8ED' },
+  completed: { label: 'Completed', color: Colors.primaryLight, bg: '#E8EEF8' },
+  cancelled: { label: 'Cancelled', color: Colors.textTertiary, bg: Colors.surfaceSecondary },
+};
+
+function JobItem({ item, onStatusChange, onDelete }: {
+  item: Job;
+  onStatusChange: (job: Job) => void;
+  onDelete: (id: string) => void;
+}) {
+  const statusConfig = STATUS_CONFIG[item.status];
+
+  return (
+    <View style={styles.jobCard}>
+      <View style={styles.jobRow}>
+        <View style={[styles.avatar, { backgroundColor: getAvatarColor(item.callerName) }]}>
+          <Text style={styles.avatarText}>{getInitials(item.callerName)}</Text>
+        </View>
+        <View style={styles.jobInfo}>
+          <View style={styles.jobHeader}>
+            <Text style={styles.jobName} numberOfLines={1}>{item.callerName}</Text>
+            <Pressable
+              onPress={() => onStatusChange(item)}
+              style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}
+            >
+              <View style={[styles.statusDot, { backgroundColor: statusConfig.color }]} />
+              <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.jobDetail}>
+            <Ionicons name="construct-outline" size={14} color={Colors.textSecondary} />
+            <Text style={styles.jobDetailText}>{item.jobType}</Text>
+          </View>
+
+          <View style={styles.jobDetail}>
+            <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
+            <Text style={styles.jobDetailText}>{formatDate(item.date)} at {item.time}</Text>
+          </View>
+
+          {!!item.address && (
+            <View style={styles.jobDetail}>
+              <Ionicons name="location-outline" size={14} color={Colors.textSecondary} />
+              <Text style={styles.jobDetailText} numberOfLines={1}>{item.address}</Text>
+            </View>
+          )}
+
+          {!!item.notes && (
+            <Text style={styles.jobNotes} numberOfLines={2}>{item.notes}</Text>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.jobActions}>
+        <Pressable
+          style={styles.jobActionBtn}
+          onPress={() => onStatusChange(item)}
+          hitSlop={8}
+        >
+          <Ionicons name="swap-horizontal-outline" size={16} color={Colors.primaryLight} />
+          <Text style={styles.jobActionText}>Status</Text>
+        </Pressable>
+        <Pressable
+          style={styles.deleteBtn}
+          onPress={() => onDelete(item.id)}
+          hitSlop={8}
+        >
+          <Feather name="trash-2" size={16} color={Colors.textTertiary} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+export default function JobsScreen() {
+  const insets = useSafeAreaInsets();
+  const { jobs, updateExistingJob, removeJob, refreshAll } = useData();
+  const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed'>('all');
+
+  const filteredJobs = filter === 'all' ? jobs : jobs.filter(j => j.status === filter);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshAll();
+    setRefreshing(false);
+  }, [refreshAll]);
+
+  const handleStatusChange = useCallback((job: Job) => {
+    const statuses: Array<Job['status']> = ['pending', 'confirmed', 'completed', 'cancelled'];
+    const options = statuses.map(s => STATUS_CONFIG[s].label);
+
+    Alert.alert('Update Status', `Current: ${STATUS_CONFIG[job.status].label}`, [
+      ...options.map((label, i) => ({
+        text: label,
+        onPress: async () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          await updateExistingJob(job.id, { status: statuses[i] });
+        },
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }, [updateExistingJob]);
+
+  const handleDelete = useCallback((id: string) => {
+    Alert.alert('Delete Job', 'Remove this job?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          await removeJob(id);
+        },
+      },
+    ]);
+  }, [removeJob]);
+
+  const renderItem = useCallback(({ item }: { item: Job }) => (
+    <JobItem
+      item={item}
+      onStatusChange={handleStatusChange}
+      onDelete={handleDelete}
+    />
+  ), [handleStatusChange, handleDelete]);
+
+  const webTopInset = Platform.OS === 'web' ? 67 : 0;
+  const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+
+  const filters: Array<{ key: typeof filter; label: string }> = [
+    { key: 'all', label: 'All' },
+    { key: 'pending', label: 'Pending' },
+    { key: 'confirmed', label: 'Confirmed' },
+    { key: 'completed', label: 'Completed' },
+  ];
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: (Platform.OS === 'web' ? webTopInset : insets.top) + 12 }]}>
+        <Text style={styles.headerTitle}>Jobs</Text>
+        <Text style={styles.headerSubtitle}>{jobs.length} total</Text>
+      </View>
+
+      <View style={styles.filterRow}>
+        {filters.map(f => (
+          <Pressable
+            key={f.key}
+            style={[styles.filterBtn, filter === f.key && styles.filterBtnActive]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setFilter(f.key);
+            }}
+          >
+            <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>
+              {f.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <FlatList
+        data={filteredJobs}
+        renderItem={renderItem}
+        keyExtractor={item => item.id}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: (Platform.OS === 'web' ? webBottomInset : 0) + 100 },
+        ]}
+        scrollEnabled={!!filteredJobs.length}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Ionicons name="construct-outline" size={48} color={Colors.textTertiary} />
+            <Text style={styles.emptyTitle}>No jobs yet</Text>
+            <Text style={styles.emptyText}>Book a job from a missed call to see it here</Text>
+          </View>
+        }
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    backgroundColor: Colors.surface,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.text,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  filterBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: Colors.surfaceSecondary,
+  },
+  filterBtnActive: {
+    backgroundColor: Colors.primary,
+  },
+  filterText: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.textSecondary,
+  },
+  filterTextActive: {
+    color: Colors.white,
+  },
+  listContent: {
+    padding: 16,
+    gap: 12,
+  },
+  jobCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  jobRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.white,
+  },
+  jobInfo: {
+    flex: 1,
+    gap: 6,
+  },
+  jobHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  jobName: {
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+    flex: 1,
+    marginRight: 8,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  jobDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  jobDetailText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  jobNotes: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textTertiary,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  jobActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  jobActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: Colors.surfaceSecondary,
+  },
+  jobActionText: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.primaryLight,
+  },
+  deleteBtn: {
+    padding: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 100,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+});
