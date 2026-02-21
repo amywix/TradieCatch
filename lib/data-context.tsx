@@ -41,6 +41,7 @@ export interface AppSettings {
   twilioAccountSid: string;
   twilioAuthToken: string;
   twilioPhoneNumber: string;
+  services: string[];
 }
 
 interface DataContextValue {
@@ -59,9 +60,20 @@ interface DataContextValue {
   updateExistingJob: (id: string, updates: any) => Promise<void>;
   removeJob: (id: string) => Promise<void>;
   updateAppSettings: (updates: Partial<AppSettings>) => Promise<void>;
+  updateServices: (services: string[]) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
+
+const DEFAULT_SERVICES = [
+  "Power point install / repair",
+  "Ceiling fan install",
+  "Lights not working",
+  "Switchboard issue",
+  "Power outage / urgent fault",
+  "Smoke alarm install",
+  "Other",
+];
 
 const DEFAULT_SETTINGS: AppSettings = {
   id: 'default',
@@ -71,6 +83,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   twilioAccountSid: '',
   twilioAuthToken: '',
   twilioPhoneNumber: '',
+  services: DEFAULT_SERVICES,
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -179,13 +192,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setSettings(updated);
   }, []);
 
+  const updateServices = useCallback(async (services: string[]) => {
+    const res = await apiRequest('PUT', '/api/services', { services });
+    const updated = await res.json();
+    setSettings(prev => ({ ...prev, services: updated }));
+  }, []);
+
   const value = useMemo(() => ({
     missedCalls, jobs, settings, isLoading,
     refreshAll, refreshCalls, refreshJobs,
     addNewCall, removeCall, sendAutoSms, getCall,
     addNewJob, updateExistingJob, removeJob,
-    updateAppSettings,
-  }), [missedCalls, jobs, settings, isLoading, refreshAll, refreshCalls, refreshJobs, addNewCall, removeCall, sendAutoSms, getCall, addNewJob, updateExistingJob, removeJob, updateAppSettings]);
+    updateAppSettings, updateServices,
+  }), [missedCalls, jobs, settings, isLoading, refreshAll, refreshCalls, refreshJobs, addNewCall, removeCall, sendAutoSms, getCall, addNewJob, updateExistingJob, removeJob, updateAppSettings, updateServices]);
 
   return (
     <DataContext.Provider value={value}>
