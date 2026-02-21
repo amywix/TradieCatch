@@ -1,6 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput, Switch, Platform,
+  Alert, Clipboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -10,9 +11,16 @@ import { useData } from '@/lib/data-context';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { settings, updateAppSettings } = useData();
+  const { settings, updateAppSettings, updateServices } = useData();
   const [businessName, setBusinessName] = useState(settings.businessName);
   const [editingName, setEditingName] = useState(false);
+  const [editingServiceIdx, setEditingServiceIdx] = useState<number | null>(null);
+  const [editingServiceText, setEditingServiceText] = useState('');
+  const [addingService, setAddingService] = useState(false);
+  const [newServiceText, setNewServiceText] = useState('');
+  const [webhookCopied, setWebhookCopied] = useState(false);
+
+  const services = settings.services || [];
 
   const handleSaveBusinessName = useCallback(async () => {
     await updateAppSettings({ businessName: businessName.trim() });
@@ -24,6 +32,78 @@ export default function SettingsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await updateAppSettings({ autoReplyEnabled: value });
   }, [updateAppSettings]);
+
+  const handleEditService = useCallback((idx: number) => {
+    setEditingServiceIdx(idx);
+    setEditingServiceText(services[idx]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [services]);
+
+  const handleSaveServiceEdit = useCallback(async () => {
+    if (editingServiceIdx === null) return;
+    const trimmed = editingServiceText.trim();
+    if (!trimmed) return;
+    const updated = [...services];
+    updated[editingServiceIdx] = trimmed;
+    await updateServices(updated);
+    setEditingServiceIdx(null);
+    setEditingServiceText('');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [editingServiceIdx, editingServiceText, services, updateServices]);
+
+  const handleDeleteService = useCallback(async (idx: number) => {
+    if (services.length <= 1) {
+      Alert.alert("Can't Remove", "You need at least one service.");
+      return;
+    }
+    Alert.alert(
+      'Remove Service',
+      `Remove "${services[idx]}" from your services?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const updated = services.filter((_, i) => i !== idx);
+            await updateServices(updated);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          },
+        },
+      ]
+    );
+  }, [services, updateServices]);
+
+  const handleAddService = useCallback(async () => {
+    const trimmed = newServiceText.trim();
+    if (!trimmed) return;
+    const updated = [...services, trimmed];
+    await updateServices(updated);
+    setNewServiceText('');
+    setAddingService(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [newServiceText, services, updateServices]);
+
+  const handleMoveService = useCallback(async (idx: number, direction: 'up' | 'down') => {
+    const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= services.length) return;
+    const updated = [...services];
+    [updated[idx], updated[newIdx]] = [updated[newIdx], updated[idx]];
+    await updateServices(updated);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [services, updateServices]);
+
+  const handleCopyWebhookUrl = useCallback(() => {
+    const url = `${Platform.OS === 'web' ? window.location.origin : '[your-published-app-url]'}/api/twilio/webhook`;
+    if (Platform.OS === 'web') {
+      navigator.clipboard?.writeText(url);
+    } else {
+      Clipboard.setString(url);
+    }
+    setWebhookCopied(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setTimeout(() => setWebhookCopied(false), 2000);
+  }, []);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -152,27 +232,100 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Services Offered</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Services Offered</Text>
+            <Pressable
+              style={styles.addButton}
+              onPress={() => { setAddingService(true); setNewServiceText(''); }}
+              hitSlop={8}
+            >
+              <Ionicons name="add-circle" size={22} color={Colors.accent} />
+            </Pressable>
+          </View>
+          <Text style={styles.sectionHint}>
+            These are the services shown to customers when they reply to your SMS. Tap to edit, swipe to remove.
+          </Text>
           <View style={styles.card}>
-            {[
-              { num: '1', service: 'Power point install / repair' },
-              { num: '2', service: 'Ceiling fan install' },
-              { num: '3', service: 'Lights not working' },
-              { num: '4', service: 'Switchboard issue' },
-              { num: '5', service: 'Power outage / urgent fault' },
-              { num: '6', service: 'Smoke alarm install' },
-              { num: '7', service: 'Other (customer describes)' },
-            ].map((item, idx) => (
-              <View key={item.num}>
+            {services.map((service, idx) => (
+              <View key={`service-${idx}`}>
                 {idx > 0 && <View style={styles.serviceDivider} />}
-                <View style={styles.serviceRow}>
-                  <View style={styles.serviceNum}>
-                    <Text style={styles.serviceNumText}>{item.num}</Text>
+                {editingServiceIdx === idx ? (
+                  <View style={styles.serviceEditRow}>
+                    <View style={styles.serviceNum}>
+                      <Text style={styles.serviceNumText}>{idx + 1}</Text>
+                    </View>
+                    <TextInput
+                      style={styles.serviceEditInput}
+                      value={editingServiceText}
+                      onChangeText={setEditingServiceText}
+                      autoFocus
+                      onSubmitEditing={handleSaveServiceEdit}
+                      placeholder="Service name"
+                      placeholderTextColor={Colors.textTertiary}
+                    />
+                    <Pressable onPress={handleSaveServiceEdit} hitSlop={8}>
+                      <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
+                    </Pressable>
+                    <Pressable onPress={() => { setEditingServiceIdx(null); setEditingServiceText(''); }} hitSlop={8}>
+                      <Ionicons name="close-circle" size={22} color={Colors.textTertiary} />
+                    </Pressable>
                   </View>
-                  <Text style={styles.serviceText}>{item.service}</Text>
-                </View>
+                ) : (
+                  <View style={styles.serviceRow}>
+                    <View style={styles.serviceNum}>
+                      <Text style={styles.serviceNumText}>{idx + 1}</Text>
+                    </View>
+                    <Pressable style={styles.serviceTextWrap} onPress={() => handleEditService(idx)}>
+                      <Text style={styles.serviceText}>{service}</Text>
+                    </Pressable>
+                    <View style={styles.serviceActions}>
+                      {idx > 0 && (
+                        <Pressable onPress={() => handleMoveService(idx, 'up')} hitSlop={6}>
+                          <Ionicons name="chevron-up" size={18} color={Colors.textTertiary} />
+                        </Pressable>
+                      )}
+                      {idx < services.length - 1 && (
+                        <Pressable onPress={() => handleMoveService(idx, 'down')} hitSlop={6}>
+                          <Ionicons name="chevron-down" size={18} color={Colors.textTertiary} />
+                        </Pressable>
+                      )}
+                      <Pressable onPress={() => handleEditService(idx)} hitSlop={6}>
+                        <Feather name="edit-2" size={14} color={Colors.textTertiary} />
+                      </Pressable>
+                      <Pressable onPress={() => handleDeleteService(idx)} hitSlop={6}>
+                        <Ionicons name="trash-outline" size={16} color={Colors.danger} />
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
               </View>
             ))}
+
+            {addingService && (
+              <>
+                <View style={styles.serviceDivider} />
+                <View style={styles.serviceEditRow}>
+                  <View style={[styles.serviceNum, { backgroundColor: Colors.accent + '20' }]}>
+                    <Ionicons name="add" size={14} color={Colors.accent} />
+                  </View>
+                  <TextInput
+                    style={styles.serviceEditInput}
+                    value={newServiceText}
+                    onChangeText={setNewServiceText}
+                    autoFocus
+                    onSubmitEditing={handleAddService}
+                    placeholder="New service name"
+                    placeholderTextColor={Colors.textTertiary}
+                  />
+                  <Pressable onPress={handleAddService} hitSlop={8}>
+                    <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
+                  </Pressable>
+                  <Pressable onPress={() => { setAddingService(false); setNewServiceText(''); }} hitSlop={8}>
+                    <Ionicons name="close-circle" size={22} color={Colors.textTertiary} />
+                  </Pressable>
+                </View>
+              </>
+            )}
           </View>
         </View>
 
@@ -200,13 +353,110 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Twilio Webhook</Text>
+          <Text style={styles.sectionTitle}>Webhook Setup Guide</Text>
           <View style={styles.card}>
-            <View style={styles.webhookInfo}>
-              <Ionicons name="information-circle-outline" size={18} color={Colors.primaryLight} />
-              <Text style={styles.webhookText}>
-                Set your Twilio incoming SMS webhook URL to:{'\n'}
-                <Text style={styles.webhookUrl}>[your-app-url]/api/twilio/webhook</Text>
+            <View style={styles.webhookIntro}>
+              <Ionicons name="information-circle" size={20} color={Colors.primaryLight} />
+              <Text style={styles.webhookIntroText}>
+                For auto-replies to work, Twilio needs to know where to send incoming SMS messages. Follow these steps to connect it:
+              </Text>
+            </View>
+
+            <View style={styles.webhookStepsDivider} />
+
+            <View style={styles.webhookStep}>
+              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
+                <Text style={styles.webhookStepNumText}>1</Text>
+              </View>
+              <View style={styles.webhookStepContent}>
+                <Text style={styles.webhookStepTitle}>Log into Twilio</Text>
+                <Text style={styles.webhookStepDesc}>
+                  Go to twilio.com and sign in to your account. If you don't have one, create a free account.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.webhookStepConnector} />
+
+            <View style={styles.webhookStep}>
+              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
+                <Text style={styles.webhookStepNumText}>2</Text>
+              </View>
+              <View style={styles.webhookStepContent}>
+                <Text style={styles.webhookStepTitle}>Go to Phone Numbers</Text>
+                <Text style={styles.webhookStepDesc}>
+                  In the left menu, click "Phone Numbers" then "Manage" then "Active Numbers". Click on the phone number you want to use.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.webhookStepConnector} />
+
+            <View style={styles.webhookStep}>
+              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
+                <Text style={styles.webhookStepNumText}>3</Text>
+              </View>
+              <View style={styles.webhookStepContent}>
+                <Text style={styles.webhookStepTitle}>Find Messaging Section</Text>
+                <Text style={styles.webhookStepDesc}>
+                  Scroll down to the "Messaging" section. Under "A message comes in", make sure the dropdown is set to "Webhook".
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.webhookStepConnector} />
+
+            <View style={styles.webhookStep}>
+              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
+                <Text style={styles.webhookStepNumText}>4</Text>
+              </View>
+              <View style={styles.webhookStepContent}>
+                <Text style={styles.webhookStepTitle}>Paste Your Webhook URL</Text>
+                <Text style={styles.webhookStepDesc}>
+                  Copy the URL below and paste it into the webhook URL field. Set the method to "HTTP POST".
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.webhookStepConnector} />
+
+            <View style={styles.webhookStep}>
+              <View style={[styles.webhookStepNum, { backgroundColor: Colors.success }]}>
+                <Ionicons name="checkmark" size={14} color={Colors.white} />
+              </View>
+              <View style={styles.webhookStepContent}>
+                <Text style={styles.webhookStepTitle}>Save</Text>
+                <Text style={styles.webhookStepDesc}>
+                  Click "Save" at the bottom of the page. That's it! Incoming SMS replies will now be handled automatically.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.webhookStepsDivider} />
+
+            <Text style={styles.webhookUrlLabel}>Your Webhook URL:</Text>
+            <Pressable style={styles.webhookUrlBox} onPress={handleCopyWebhookUrl}>
+              <Text style={styles.webhookUrlText} numberOfLines={1}>
+                {Platform.OS === 'web'
+                  ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/twilio/webhook`
+                  : '[your-published-app-url]/api/twilio/webhook'}
+              </Text>
+              <View style={styles.copyButton}>
+                <Ionicons
+                  name={webhookCopied ? 'checkmark' : 'copy-outline'}
+                  size={16}
+                  color={webhookCopied ? Colors.success : Colors.accent}
+                />
+                <Text style={[styles.copyButtonText, webhookCopied && { color: Colors.success }]}>
+                  {webhookCopied ? 'Copied!' : 'Copy'}
+                </Text>
+              </View>
+            </Pressable>
+
+            <View style={styles.webhookNote}>
+              <Ionicons name="bulb-outline" size={16} color={Colors.warning} />
+              <Text style={styles.webhookNoteText}>
+                Make sure your app is published first. The webhook URL only works once your app is live and accessible from the internet.
               </Text>
             </View>
           </View>
@@ -255,6 +505,12 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 4,
+  },
   sectionTitle: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
@@ -262,6 +518,16 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     paddingLeft: 4,
+  },
+  sectionHint: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textTertiary,
+    paddingLeft: 4,
+    lineHeight: 18,
+  },
+  addButton: {
+    padding: 2,
   },
   card: {
     backgroundColor: Colors.surface,
@@ -367,6 +633,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    paddingVertical: 6,
+  },
+  serviceEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingVertical: 4,
   },
   serviceNum: {
@@ -382,32 +654,142 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
     color: Colors.text,
   },
+  serviceTextWrap: {
+    flex: 1,
+  },
   serviceText: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
     color: Colors.text,
+  },
+  serviceEditInput: {
     flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.accent,
+    paddingVertical: 4,
+  },
+  serviceActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   serviceDivider: {
     height: 1,
     backgroundColor: Colors.borderLight,
     marginVertical: 4,
   },
-  webhookInfo: {
+  webhookIntro: {
     flexDirection: 'row',
     gap: 10,
     alignItems: 'flex-start',
   },
-  webhookText: {
+  webhookIntroText: {
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
     color: Colors.textSecondary,
     flex: 1,
     lineHeight: 20,
   },
-  webhookUrl: {
+  webhookStepsDivider: {
+    height: 1,
+    backgroundColor: Colors.borderLight,
+    marginVertical: 14,
+  },
+  webhookStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  webhookStepNum: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  webhookStepNumText: {
+    fontSize: 12,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.white,
+  },
+  webhookStepContent: {
+    flex: 1,
+    gap: 2,
+  },
+  webhookStepTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+  },
+  webhookStepDesc: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    lineHeight: 18,
+  },
+  webhookStepConnector: {
+    width: 2,
+    height: 12,
+    backgroundColor: Colors.borderLight,
+    marginLeft: 11,
+    marginVertical: 3,
+  },
+  webhookUrlLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+    marginBottom: 6,
+  },
+  webhookUrlBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceSecondary,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  webhookUrlText: {
+    flex: 1,
+    fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
     color: Colors.accent,
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  copyButtonText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.accent,
+  },
+  webhookNote: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+    marginTop: 12,
+    backgroundColor: '#FFF8E8',
+    padding: 10,
+    borderRadius: 8,
+  },
+  webhookNoteText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    flex: 1,
+    lineHeight: 18,
   },
   aboutRow: {
     flexDirection: 'row',
