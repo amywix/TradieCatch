@@ -21,6 +21,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({
       revenueCatApiKey: process.env.REVENUECAT_API_KEY || "",
       webhookUrl: appUrl ? `${appUrl}/api/twilio/webhook` : "",
+      voiceWebhookUrl: appUrl ? `${appUrl}/api/twilio/voice` : "",
       appUrl,
     });
   });
@@ -79,6 +80,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     res.set("Content-Type", "text/xml");
     res.send("<Response></Response>");
+  });
+
+  app.post("/api/twilio/voice", async (req: Request, res: Response) => {
+    const from = req.body.From || req.body.Caller || "";
+    const callStatus = req.body.CallStatus || "";
+    const callerName = req.body.CallerName || "Unknown Caller";
+
+    console.log(`Incoming call from ${from} (status: ${callStatus}, name: ${callerName})`);
+
+    try {
+      const [existingCall] = await db.select().from(missedCalls)
+        .where(eq(missedCalls.phoneNumber, from))
+        .orderBy(desc(missedCalls.timestamp))
+        .limit(1);
+
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const isDuplicate = existingCall && new Date(existingCall.timestamp) > fiveMinAgo;
+
+      if (!isDuplicate) {
+        const [newCall] = await db.insert(missedCalls).values({
+          callerName: callerName || "Unknown Caller",
+          phoneNumber: from,
+          timestamp: new Date(),
+        }).returning();
+
+        console.log(`Missed call logged: ${from} (id: ${newCall.id})`);
+
+        const [settingsRow] = await db.select().from(settings).where(eq(settings.id, "default"));
+        if (settingsRow?.autoReplyEnabled) {
+          try {
+            await sendInitialMissedCallSms(newCall.id);
+            console.log(`Auto-reply SMS sent for call ${newCall.id}`);
+          } catch (smsErr) {
+            console.error("Auto-reply SMS failed:", smsErr);
+          }
+        }
+      } else {
+        console.log(`Duplicate call from ${from} within 5 minutes, skipping.`);
+      }
+    } catch (err) {
+      console.error("Voice webhook error:", err);
+    }
+
+    const [settingsRow] = await db.select().from(settings).where(eq(settings.id, "default"));
+    const businessName = settingsRow?.businessName || "us";
+
+    res.set("Content-Type", "text/xml");
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Sorry we can't take your call right now. We'll send you a text shortly so we can help you out. Thanks for calling ${businessName}.</Say>
+  <Hangup/>
+</Response>`);
   });
 
   app.get("/api/jobs", async (_req: Request, res: Response) => {

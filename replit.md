@@ -37,7 +37,9 @@ Preferred communication style: Simple, everyday language.
   - `PUT /api/jobs/:id/status` - Update job status
   - `GET/POST/PUT/DELETE /api/sms-templates` - Manage SMS templates
   - `GET/PUT /api/settings` - App settings
-  - Twilio webhook endpoint for incoming SMS replies
+  - `GET/PUT /api/services` - Manage services list
+  - `POST /api/twilio/webhook` - Twilio SMS webhook for incoming text replies
+  - `POST /api/twilio/voice` - Twilio voice webhook for incoming calls (auto-logs as missed call, triggers auto-SMS, returns TwiML with voicemail message)
 
 ### Database (PostgreSQL + Drizzle ORM)
 - **ORM**: Drizzle ORM with PostgreSQL dialect

@@ -20,17 +20,17 @@ export default function SettingsScreen() {
   const [editingServiceText, setEditingServiceText] = useState('');
   const [addingService, setAddingService] = useState(false);
   const [newServiceText, setNewServiceText] = useState('');
-  const [webhookCopied, setWebhookCopied] = useState(false);
+  const [webhookCopied, setWebhookCopied] = useState<'sms' | 'voice' | false>(false);
   const [webhookUrl, setWebhookUrl] = useState('');
+  const [voiceWebhookUrl, setVoiceWebhookUrl] = useState('');
 
   useEffect(() => {
     (async () => {
       try {
         const res = await apiRequest('GET', '/api/config');
         const data = await res.json();
-        if (data.webhookUrl) {
-          setWebhookUrl(data.webhookUrl);
-        }
+        if (data.webhookUrl) setWebhookUrl(data.webhookUrl);
+        if (data.voiceWebhookUrl) setVoiceWebhookUrl(data.voiceWebhookUrl);
       } catch (e) {}
     })();
   }, []);
@@ -109,17 +109,18 @@ export default function SettingsScreen() {
   }, [services, updateServices]);
 
   const displayWebhookUrl = webhookUrl || '[your-app-url]/api/twilio/webhook';
+  const displayVoiceWebhookUrl = voiceWebhookUrl || '[your-app-url]/api/twilio/voice';
 
-  const handleCopyWebhookUrl = useCallback(async () => {
-    if (!webhookUrl) {
+  const handleCopyUrl = useCallback(async (url: string, type: 'sms' | 'voice') => {
+    if (!url || url.startsWith('[')) {
       Alert.alert('Not Available Yet', 'The webhook URL will appear once your app is published and live.');
       return;
     }
-    await ExpoClipboard.setStringAsync(webhookUrl);
-    setWebhookCopied(true);
+    await ExpoClipboard.setStringAsync(url);
+    setWebhookCopied(type);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setTimeout(() => setWebhookCopied(false), 2000);
-  }, [webhookUrl]);
+  }, []);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -374,7 +375,7 @@ export default function SettingsScreen() {
             <View style={styles.webhookIntro}>
               <Ionicons name="information-circle" size={20} color={Colors.primaryLight} />
               <Text style={styles.webhookIntroText}>
-                For auto-replies to work, Twilio needs to know where to send incoming SMS messages. Follow these steps to connect it:
+                To auto-log missed calls and send SMS replies, you need to set up two webhooks in your Twilio account. Follow these steps:
               </Text>
             </View>
 
@@ -401,7 +402,7 @@ export default function SettingsScreen() {
               <View style={styles.webhookStepContent}>
                 <Text style={styles.webhookStepTitle}>Go to Phone Numbers</Text>
                 <Text style={styles.webhookStepDesc}>
-                  In the left menu, click "Phone Numbers" then "Manage" then "Active Numbers". Click on the phone number you want to use.
+                  In the left menu, click "Phone Numbers" {'\u2192'} "Manage" {'\u2192'} "Active Numbers". Click on the phone number you want to use.
                 </Text>
               </View>
             </View>
@@ -413,9 +414,9 @@ export default function SettingsScreen() {
                 <Text style={styles.webhookStepNumText}>3</Text>
               </View>
               <View style={styles.webhookStepContent}>
-                <Text style={styles.webhookStepTitle}>Find Messaging Section</Text>
+                <Text style={styles.webhookStepTitle}>Set Up Voice (Incoming Calls)</Text>
                 <Text style={styles.webhookStepDesc}>
-                  Scroll down to the "Messaging" section. Under "A message comes in", make sure the dropdown is set to "Webhook".
+                  In the "Voice" section, under "A call comes in", set the dropdown to "Webhook". Paste the Voice URL below. Set method to "HTTP POST".
                 </Text>
               </View>
             </View>
@@ -427,9 +428,9 @@ export default function SettingsScreen() {
                 <Text style={styles.webhookStepNumText}>4</Text>
               </View>
               <View style={styles.webhookStepContent}>
-                <Text style={styles.webhookStepTitle}>Paste Your Webhook URL</Text>
+                <Text style={styles.webhookStepTitle}>Set Up Messaging (SMS Replies)</Text>
                 <Text style={styles.webhookStepDesc}>
-                  Copy the URL below and paste it into the webhook URL field. Set the method to "HTTP POST".
+                  In the "Messaging" section, under "A message comes in", set the dropdown to "Webhook". Paste the SMS URL below. Set method to "HTTP POST".
                 </Text>
               </View>
             </View>
@@ -443,26 +444,51 @@ export default function SettingsScreen() {
               <View style={styles.webhookStepContent}>
                 <Text style={styles.webhookStepTitle}>Save</Text>
                 <Text style={styles.webhookStepDesc}>
-                  Click "Save" at the bottom of the page. That's it! Incoming SMS replies will now be handled automatically.
+                  Click "Save" at the bottom of the page. That's it! Incoming calls will be logged as missed calls, and SMS replies will be handled automatically.
                 </Text>
               </View>
             </View>
 
             <View style={styles.webhookStepsDivider} />
 
-            <Text style={styles.webhookUrlLabel}>Your Webhook URL:</Text>
-            <Pressable style={styles.webhookUrlBox} onPress={handleCopyWebhookUrl}>
+            <Text style={styles.webhookUrlLabel}>
+              <Ionicons name="call-outline" size={14} color={Colors.text} />
+              {'  '}Voice Webhook (incoming calls):
+            </Text>
+            <Pressable style={styles.webhookUrlBox} onPress={() => handleCopyUrl(voiceWebhookUrl, 'voice')}>
+              <Text style={styles.webhookUrlText} numberOfLines={2}>
+                {displayVoiceWebhookUrl}
+              </Text>
+              <View style={styles.copyButton}>
+                <Ionicons
+                  name={webhookCopied === 'voice' ? 'checkmark' : 'copy-outline'}
+                  size={16}
+                  color={webhookCopied === 'voice' ? Colors.success : Colors.accent}
+                />
+                <Text style={[styles.copyButtonText, webhookCopied === 'voice' && { color: Colors.success }]}>
+                  {webhookCopied === 'voice' ? 'Copied!' : 'Copy'}
+                </Text>
+              </View>
+            </Pressable>
+
+            <View style={{ height: 12 }} />
+
+            <Text style={styles.webhookUrlLabel}>
+              <Ionicons name="chatbubble-outline" size={14} color={Colors.text} />
+              {'  '}SMS Webhook (incoming text replies):
+            </Text>
+            <Pressable style={styles.webhookUrlBox} onPress={() => handleCopyUrl(webhookUrl, 'sms')}>
               <Text style={styles.webhookUrlText} numberOfLines={2}>
                 {displayWebhookUrl}
               </Text>
               <View style={styles.copyButton}>
                 <Ionicons
-                  name={webhookCopied ? 'checkmark' : 'copy-outline'}
+                  name={webhookCopied === 'sms' ? 'checkmark' : 'copy-outline'}
                   size={16}
-                  color={webhookCopied ? Colors.success : Colors.accent}
+                  color={webhookCopied === 'sms' ? Colors.success : Colors.accent}
                 />
-                <Text style={[styles.copyButtonText, webhookCopied && { color: Colors.success }]}>
-                  {webhookCopied ? 'Copied!' : 'Copy'}
+                <Text style={[styles.copyButtonText, webhookCopied === 'sms' && { color: Colors.success }]}>
+                  {webhookCopied === 'sms' ? 'Copied!' : 'Copy'}
                 </Text>
               </View>
             </Pressable>
@@ -470,7 +496,7 @@ export default function SettingsScreen() {
             <View style={styles.webhookNote}>
               <Ionicons name="bulb-outline" size={16} color={Colors.warning} />
               <Text style={styles.webhookNoteText}>
-                Make sure your app is published first. The webhook URL only works once your app is live and accessible from the internet.
+                Make sure your app is published first. These webhook URLs only work once your app is live and accessible from the internet.
               </Text>
             </View>
           </View>
