@@ -8,9 +8,20 @@ import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversatio
 export async function registerRoutes(app: Express): Promise<Server> {
   await seedDefaults();
 
-  app.get("/api/config", async (_req: Request, res: Response) => {
+  app.get("/api/config", async (req: Request, res: Response) => {
+    const domains = process.env.REPLIT_DOMAINS || "";
+    const primaryDomain = domains.split(",")[0]?.trim() || "";
+    const protocol = req.protocol || "https";
+    const hostFromHeader = req.get("host") || "";
+    const appUrl = primaryDomain
+      ? `https://${primaryDomain}`
+      : hostFromHeader
+        ? `${protocol}://${hostFromHeader}`
+        : "";
     res.json({
       revenueCatApiKey: process.env.REVENUECAT_API_KEY || "",
+      webhookUrl: appUrl ? `${appUrl}/api/twilio/webhook` : "",
+      appUrl,
     });
   });
 

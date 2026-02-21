@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput, Switch, Platform,
   Alert,
@@ -9,6 +9,7 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useData } from '@/lib/data-context';
+import { apiRequest } from '@/lib/query-client';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -20,6 +21,19 @@ export default function SettingsScreen() {
   const [addingService, setAddingService] = useState(false);
   const [newServiceText, setNewServiceText] = useState('');
   const [webhookCopied, setWebhookCopied] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiRequest('GET', '/api/config');
+        const data = await res.json();
+        if (data.webhookUrl) {
+          setWebhookUrl(data.webhookUrl);
+        }
+      } catch (e) {}
+    })();
+  }, []);
 
   const services = settings.services || [];
 
@@ -94,13 +108,18 @@ export default function SettingsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [services, updateServices]);
 
+  const displayWebhookUrl = webhookUrl || '[your-app-url]/api/twilio/webhook';
+
   const handleCopyWebhookUrl = useCallback(async () => {
-    const url = `${Platform.OS === 'web' ? window.location.origin : '[your-published-app-url]'}/api/twilio/webhook`;
-    await ExpoClipboard.setStringAsync(url);
+    if (!webhookUrl) {
+      Alert.alert('Not Available Yet', 'The webhook URL will appear once your app is published and live.');
+      return;
+    }
+    await ExpoClipboard.setStringAsync(webhookUrl);
     setWebhookCopied(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setTimeout(() => setWebhookCopied(false), 2000);
-  }, []);
+  }, [webhookUrl]);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -433,10 +452,8 @@ export default function SettingsScreen() {
 
             <Text style={styles.webhookUrlLabel}>Your Webhook URL:</Text>
             <Pressable style={styles.webhookUrlBox} onPress={handleCopyWebhookUrl}>
-              <Text style={styles.webhookUrlText} numberOfLines={1}>
-                {Platform.OS === 'web'
-                  ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/twilio/webhook`
-                  : '[your-published-app-url]/api/twilio/webhook'}
+              <Text style={styles.webhookUrlText} numberOfLines={2}>
+                {displayWebhookUrl}
               </Text>
               <View style={styles.copyButton}>
                 <Ionicons
