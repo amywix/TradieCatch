@@ -56,6 +56,16 @@ export const smsTemplates = pgTable("sms_templates", {
   isDefault: boolean("is_default").default(false).notNull(),
 });
 
+export const DEFAULT_SERVICES = [
+  "Power point install / repair",
+  "Ceiling fan install",
+  "Lights not working",
+  "Switchboard issue",
+  "Power outage / urgent fault",
+  "Smoke alarm install",
+  "Other",
+];
+
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default("default"),
   businessName: text("business_name").default("").notNull(),
@@ -64,6 +74,7 @@ export const settings = pgTable("settings", {
   twilioAccountSid: text("twilio_account_sid").default(""),
   twilioAuthToken: text("twilio_auth_token").default(""),
   twilioPhoneNumber: text("twilio_phone_number").default(""),
+  services: jsonb("services").$type<string[]>().default(DEFAULT_SERVICES),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
