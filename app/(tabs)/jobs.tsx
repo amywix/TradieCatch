@@ -1,16 +1,15 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, Pressable, Platform, Alert, RefreshControl,
+  View, Text, StyleSheet, FlatList, Pressable, Platform, Alert, RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { useData } from '@/lib/data-context';
+import { useData, Job } from '@/lib/data-context';
 import { formatDate, getInitials, getAvatarColor } from '@/lib/helpers';
-import { Job } from '@/lib/storage';
 
-const STATUS_CONFIG = {
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label: 'Pending', color: Colors.warning, bg: '#FFF8E0' },
   confirmed: { label: 'Confirmed', color: Colors.success, bg: '#E8F8ED' },
   completed: { label: 'Completed', color: Colors.primaryLight, bg: '#E8EEF8' },
@@ -22,7 +21,7 @@ function JobItem({ item, onStatusChange, onDelete }: {
   onStatusChange: (job: Job) => void;
   onDelete: (id: string) => void;
 }) {
-  const statusConfig = STATUS_CONFIG[item.status];
+  const statusConfig = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
 
   return (
     <View style={styles.jobCard}>
@@ -47,10 +46,14 @@ function JobItem({ item, onStatusChange, onDelete }: {
             <Text style={styles.jobDetailText}>{item.jobType}</Text>
           </View>
 
-          <View style={styles.jobDetail}>
-            <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
-            <Text style={styles.jobDetailText}>{formatDate(item.date)} at {item.time}</Text>
-          </View>
+          {item.date && (
+            <View style={styles.jobDetail}>
+              <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
+              <Text style={styles.jobDetailText}>
+                {formatDate(item.date)}{item.time ? ` - ${item.time}` : ''}
+              </Text>
+            </View>
+          )}
 
           {!!item.address && (
             <View style={styles.jobDetail}>
@@ -61,6 +64,13 @@ function JobItem({ item, onStatusChange, onDelete }: {
 
           {!!item.notes && (
             <Text style={styles.jobNotes} numberOfLines={2}>{item.notes}</Text>
+          )}
+
+          {item.isUrgent && (
+            <View style={styles.urgentBadge}>
+              <Ionicons name="warning" size={12} color={Colors.danger} />
+              <Text style={styles.urgentText}>URGENT</Text>
+            </View>
           )}
         </View>
       </View>
@@ -88,7 +98,7 @@ function JobItem({ item, onStatusChange, onDelete }: {
 
 export default function JobsScreen() {
   const insets = useSafeAreaInsets();
-  const { jobs, updateExistingJob, removeJob, refreshAll } = useData();
+  const { jobs, updateExistingJob, removeJob, refreshAll, isLoading } = useData();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed'>('all');
 
@@ -101,11 +111,11 @@ export default function JobsScreen() {
   }, [refreshAll]);
 
   const handleStatusChange = useCallback((job: Job) => {
-    const statuses: Array<Job['status']> = ['pending', 'confirmed', 'completed', 'cancelled'];
-    const options = statuses.map(s => STATUS_CONFIG[s].label);
+    const statuses = ['pending', 'confirmed', 'completed', 'cancelled'];
+    const labels = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
-    Alert.alert('Update Status', `Current: ${STATUS_CONFIG[job.status].label}`, [
-      ...options.map((label, i) => ({
+    Alert.alert('Update Status', `Current: ${STATUS_CONFIG[job.status]?.label || job.status}`, [
+      ...labels.map((label, i) => ({
         text: label,
         onPress: async () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -145,7 +155,7 @@ export default function JobsScreen() {
     { key: 'all', label: 'All' },
     { key: 'pending', label: 'Pending' },
     { key: 'confirmed', label: 'Confirmed' },
-    { key: 'completed', label: 'Completed' },
+    { key: 'completed', label: 'Done' },
   ];
 
   return (
@@ -186,11 +196,17 @@ export default function JobsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="construct-outline" size={48} color={Colors.textTertiary} />
-            <Text style={styles.emptyTitle}>No jobs yet</Text>
-            <Text style={styles.emptyText}>Book a job from a missed call to see it here</Text>
-          </View>
+          !isLoading ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="construct-outline" size={48} color={Colors.textTertiary} />
+              <Text style={styles.emptyTitle}>No jobs yet</Text>
+              <Text style={styles.emptyText}>Jobs booked from SMS conversations will appear here automatically</Text>
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color={Colors.accent} />
+            </View>
+          )
         }
       />
     </View>
@@ -324,6 +340,22 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     fontStyle: 'italic',
     marginTop: 2,
+  },
+  urgentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+    backgroundColor: '#FFEEEE',
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  urgentText: {
+    fontSize: 10,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.danger,
   },
   jobActions: {
     flexDirection: 'row',

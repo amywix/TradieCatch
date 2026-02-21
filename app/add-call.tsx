@@ -24,11 +24,7 @@ export default function AddCallScreen() {
     setSaving(true);
 
     try {
-      await addNewCall({
-        callerName: callerName.trim() || 'Unknown Caller',
-        phoneNumber: phoneNumber.trim(),
-        timestamp: Date.now(),
-      });
+      await addNewCall(callerName.trim() || 'Unknown Caller', phoneNumber.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch {
@@ -63,11 +59,12 @@ export default function AddCallScreen() {
             style={styles.input}
             value={phoneNumber}
             onChangeText={setPhoneNumber}
-            placeholder="0412 345 678"
+            placeholder="+61412345678"
             placeholderTextColor={Colors.textTertiary}
             keyboardType="phone-pad"
             autoFocus
           />
+          <Text style={styles.fieldHint}>Include country code (e.g. +61 for Australia)</Text>
         </View>
 
         <View style={styles.fieldGroup}>
@@ -159,6 +156,12 @@ const styles = StyleSheet.create({
     color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  fieldHint: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textTertiary,
+    paddingLeft: 4,
   },
   footer: {
     position: 'absolute',

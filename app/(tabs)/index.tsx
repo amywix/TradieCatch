@@ -1,25 +1,40 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, Pressable, Platform, Alert, RefreshControl,
+  View, Text, StyleSheet, FlatList, Pressable, Platform, Alert, RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Colors from '@/constants/colors';
-import { useData } from '@/lib/data-context';
+import { useData, MissedCall } from '@/lib/data-context';
 import { formatTimeAgo, formatTime, getInitials, getAvatarColor } from '@/lib/helpers';
-import { MissedCall } from '@/lib/storage';
 
-function CallItem({ item, onSendSms, onBookJob, onDelete }: {
+const STATE_LABELS: Record<string, string> = {
+  none: '',
+  awaiting_service: 'Awaiting reply',
+  awaiting_sub_option: 'Awaiting details',
+  awaiting_urgency: 'Checking urgency',
+  awaiting_other_description: 'Awaiting description',
+  awaiting_address: 'Awaiting address',
+  awaiting_time: 'Awaiting time',
+  completed: 'Conversation complete',
+};
+
+function CallItem({ item, onSendAutoSms, onBookJob, onDelete, onViewConvo, sendingId }: {
   item: MissedCall;
-  onSendSms: (call: MissedCall) => void;
+  onSendAutoSms: (call: MissedCall) => void;
   onBookJob: (call: MissedCall) => void;
   onDelete: (id: string) => void;
+  onViewConvo: (call: MissedCall) => void;
+  sendingId: string | null;
 }) {
+  const isSending = sendingId === item.id;
+  const hasConversation = item.conversationState !== 'none' && (item.conversationLog?.length || 0) > 0;
+  const stateLabel = STATE_LABELS[item.conversationState] || '';
+
   return (
-    <Animated.View entering={FadeIn.duration(300)} style={styles.callCard}>
+    <View style={styles.callCard}>
       <View style={styles.callRow}>
         <View style={[styles.avatar, { backgroundColor: getAvatarColor(item.callerName) }]}>
           <Text style={styles.avatarText}>{getInitials(item.callerName)}</Text>
@@ -27,18 +42,18 @@ function CallItem({ item, onSendSms, onBookJob, onDelete }: {
         <View style={styles.callInfo}>
           <View style={styles.callHeader}>
             <Text style={styles.callerName} numberOfLines={1}>{item.callerName}</Text>
-            <Text style={styles.callTime}>{formatTimeAgo(item.timestamp)}</Text>
+            <Text style={styles.callTime}>{formatTimeAgo(new Date(item.timestamp).getTime())}</Text>
           </View>
           <Text style={styles.phoneNumber}>{item.phoneNumber}</Text>
           <View style={styles.callMeta}>
             <View style={styles.callTimeDetail}>
               <Ionicons name="call-outline" size={12} color={Colors.danger} />
-              <Text style={styles.callTimeText}>Missed at {formatTime(item.timestamp)}</Text>
+              <Text style={styles.callTimeText}>Missed at {formatTime(new Date(item.timestamp).getTime())}</Text>
             </View>
             {item.replied && (
               <View style={styles.repliedBadge}>
                 <Ionicons name="checkmark-circle" size={12} color={Colors.success} />
-                <Text style={styles.repliedText}>Replied</Text>
+                <Text style={styles.repliedText}>SMS Sent</Text>
               </View>
             )}
             {item.jobBooked && (
@@ -48,28 +63,73 @@ function CallItem({ item, onSendSms, onBookJob, onDelete }: {
               </View>
             )}
           </View>
+          {!!stateLabel && item.conversationState !== 'none' && (
+            <View style={styles.stateBadgeRow}>
+              <View style={[
+                styles.stateBadge,
+                item.conversationState === 'completed' ? styles.stateBadgeComplete : styles.stateBadgeActive,
+              ]}>
+                <View style={[
+                  styles.stateDot,
+                  { backgroundColor: item.conversationState === 'completed' ? Colors.success : Colors.warning },
+                ]} />
+                <Text style={[
+                  styles.stateText,
+                  { color: item.conversationState === 'completed' ? Colors.success : Colors.warning },
+                ]}>
+                  {stateLabel}
+                </Text>
+              </View>
+              {item.selectedService && (
+                <Text style={styles.serviceText} numberOfLines={1}>{item.selectedService}</Text>
+              )}
+            </View>
+          )}
+          {item.isUrgent && (
+            <View style={styles.urgentBadge}>
+              <Ionicons name="warning" size={12} color={Colors.danger} />
+              <Text style={styles.urgentText}>URGENT</Text>
+            </View>
+          )}
         </View>
       </View>
 
       <View style={styles.callActions}>
         {!item.replied && (
           <Pressable
-            style={styles.actionBtn}
-            onPress={() => onSendSms(item)}
+            style={[styles.actionBtnPrimary, isSending && styles.actionBtnDisabled]}
+            onPress={() => onSendAutoSms(item)}
+            disabled={isSending}
             hitSlop={8}
           >
-            <Ionicons name="chatbubble-outline" size={18} color={Colors.accent} />
-            <Text style={styles.actionText}>Send SMS</Text>
+            {isSending ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <Ionicons name="chatbubble-outline" size={16} color={Colors.white} />
+            )}
+            <Text style={styles.actionTextPrimary}>
+              {isSending ? 'Sending...' : 'Send Auto-SMS'}
+            </Text>
           </Pressable>
         )}
-        {!item.jobBooked && (
+        {hasConversation && (
+          <Pressable
+            style={styles.actionBtn}
+            onPress={() => onViewConvo(item)}
+            hitSlop={8}
+          >
+            <Ionicons name="chatbubbles-outline" size={16} color={Colors.primaryLight} />
+            <Text style={[styles.actionText, { color: Colors.primaryLight }]}>View Chat</Text>
+          </Pressable>
+        )}
+        {!item.jobBooked && item.conversationState !== 'completed' && (
           <Pressable
             style={styles.actionBtn}
             onPress={() => onBookJob(item)}
             hitSlop={8}
           >
-            <Ionicons name="calendar-outline" size={18} color={Colors.primaryLight} />
-            <Text style={[styles.actionText, { color: Colors.primaryLight }]}>Book Job</Text>
+            <Ionicons name="calendar-outline" size={16} color={Colors.textSecondary} />
+            <Text style={[styles.actionText, { color: Colors.textSecondary }]}>Book</Text>
           </Pressable>
         )}
         <Pressable
@@ -77,17 +137,18 @@ function CallItem({ item, onSendSms, onBookJob, onDelete }: {
           onPress={() => onDelete(item.id)}
           hitSlop={8}
         >
-          <Feather name="trash-2" size={16} color={Colors.textTertiary} />
+          <Feather name="trash-2" size={15} color={Colors.textTertiary} />
         </Pressable>
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
 export default function CallsScreen() {
   const insets = useSafeAreaInsets();
-  const { missedCalls, removeCall, refreshAll, isLoading } = useData();
+  const { missedCalls, removeCall, refreshAll, isLoading, sendAutoSms } = useData();
   const [refreshing, setRefreshing] = useState(false);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   const unrepliedCount = missedCalls.filter(c => !c.replied).length;
 
@@ -97,14 +158,28 @@ export default function CallsScreen() {
     setRefreshing(false);
   }, [refreshAll]);
 
-  const handleSendSms = useCallback((call: MissedCall) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({ pathname: '/send-sms', params: { callId: call.id, callerName: call.callerName, phoneNumber: call.phoneNumber } });
-  }, []);
+  const handleSendAutoSms = useCallback(async (call: MissedCall) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSendingId(call.id);
+    try {
+      await sendAutoSms(call.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('SMS Sent', `Auto-reply SMS sent to ${call.callerName}. The conversation flow has started.`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to send SMS. Check your Twilio settings.');
+    } finally {
+      setSendingId(null);
+    }
+  }, [sendAutoSms]);
 
   const handleBookJob = useCallback((call: MissedCall) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({ pathname: '/book-job', params: { callId: call.id, callerName: call.callerName, phoneNumber: call.phoneNumber } });
+  }, []);
+
+  const handleViewConvo = useCallback((call: MissedCall) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({ pathname: '/conversation', params: { callId: call.id } });
   }, []);
 
   const handleDelete = useCallback((id: string) => {
@@ -129,11 +204,13 @@ export default function CallsScreen() {
   const renderItem = useCallback(({ item }: { item: MissedCall }) => (
     <CallItem
       item={item}
-      onSendSms={handleSendSms}
+      onSendAutoSms={handleSendAutoSms}
       onBookJob={handleBookJob}
       onDelete={handleDelete}
+      onViewConvo={handleViewConvo}
+      sendingId={sendingId}
     />
-  ), [handleSendSms, handleBookJob, handleDelete]);
+  ), [handleSendAutoSms, handleBookJob, handleDelete, handleViewConvo, sendingId]);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -172,7 +249,11 @@ export default function CallsScreen() {
               <Text style={styles.emptyTitle}>No missed calls</Text>
               <Text style={styles.emptyText}>Tap + to log a missed call manually</Text>
             </View>
-          ) : null
+          ) : (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color={Colors.accent} />
+            </View>
+          )
         }
       />
     </View>
@@ -305,6 +386,57 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: Colors.accent,
   },
+  stateBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  stateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  stateBadgeActive: {
+    backgroundColor: '#FFF8E0',
+  },
+  stateBadgeComplete: {
+    backgroundColor: '#E8F8ED',
+  },
+  stateDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  stateText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  serviceText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  urgentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    backgroundColor: '#FFEEEE',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  urgentText: {
+    fontSize: 11,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.danger,
+  },
   callActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -314,19 +446,35 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
   },
-  actionBtn: {
+  actionBtnPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 10,
+    backgroundColor: Colors.accent,
+  },
+  actionBtnDisabled: {
+    opacity: 0.6,
+  },
+  actionTextPrimary: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.white,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     backgroundColor: Colors.surfaceSecondary,
   },
   actionText: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: Colors.accent,
   },
   actionBtnDanger: {
     marginLeft: 'auto',

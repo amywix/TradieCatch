@@ -1,17 +1,16 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, TextInput, Switch, Platform, Alert,
+  View, Text, StyleSheet, ScrollView, Pressable, TextInput, Switch, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useData } from '@/lib/data-context';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { settings, templates, updateAppSettings, makeDefaultTemplate, removeTemplate } = useData();
+  const { settings, updateAppSettings } = useData();
   const [businessName, setBusinessName] = useState(settings.businessName);
   const [editingName, setEditingName] = useState(false);
 
@@ -25,20 +24,6 @@ export default function SettingsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await updateAppSettings({ autoReplyEnabled: value });
   }, [updateAppSettings]);
-
-  const handleDeleteTemplate = useCallback((id: string, name: string) => {
-    Alert.alert('Delete Template', `Remove "${name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          await removeTemplate(id);
-        },
-      },
-    ]);
-  }, [removeTemplate]);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -122,64 +107,86 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>SMS Templates</Text>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/edit-template');
-              }}
-              hitSlop={8}
-            >
-              <Ionicons name="add-circle-outline" size={22} color={Colors.accent} />
-            </Pressable>
+          <Text style={styles.sectionTitle}>SMS Flow</Text>
+          <View style={styles.card}>
+            <View style={styles.flowStep}>
+              <View style={[styles.flowStepNumber, { backgroundColor: Colors.accent }]}>
+                <Text style={styles.flowStepNumberText}>1</Text>
+              </View>
+              <View style={styles.flowStepContent}>
+                <Text style={styles.flowStepTitle}>Initial SMS</Text>
+                <Text style={styles.flowStepDesc}>Missed call greeting with service menu</Text>
+              </View>
+            </View>
+            <View style={styles.flowDivider} />
+            <View style={styles.flowStep}>
+              <View style={[styles.flowStepNumber, { backgroundColor: Colors.warning }]}>
+                <Text style={styles.flowStepNumberText}>2</Text>
+              </View>
+              <View style={styles.flowStepContent}>
+                <Text style={styles.flowStepTitle}>Service Selection</Text>
+                <Text style={styles.flowStepDesc}>Customer picks their service need</Text>
+              </View>
+            </View>
+            <View style={styles.flowDivider} />
+            <View style={styles.flowStep}>
+              <View style={[styles.flowStepNumber, { backgroundColor: Colors.primaryLight }]}>
+                <Text style={styles.flowStepNumberText}>3</Text>
+              </View>
+              <View style={styles.flowStepContent}>
+                <Text style={styles.flowStepTitle}>Job Details</Text>
+                <Text style={styles.flowStepDesc}>Collect address and preferred time</Text>
+              </View>
+            </View>
+            <View style={styles.flowDivider} />
+            <View style={styles.flowStep}>
+              <View style={[styles.flowStepNumber, { backgroundColor: Colors.success }]}>
+                <Text style={styles.flowStepNumberText}>4</Text>
+              </View>
+              <View style={styles.flowStepContent}>
+                <Text style={styles.flowStepTitle}>Booking Confirmed</Text>
+                <Text style={styles.flowStepDesc}>Job auto-created in your Jobs tab</Text>
+              </View>
+            </View>
           </View>
+        </View>
 
-          {templates.map((template) => (
-            <View key={template.id} style={styles.templateCard}>
-              <View style={styles.templateHeader}>
-                <View style={styles.templateNameRow}>
-                  <Text style={styles.templateName}>{template.name}</Text>
-                  {template.isDefault && (
-                    <View style={styles.defaultBadge}>
-                      <Text style={styles.defaultBadgeText}>Default</Text>
-                    </View>
-                  )}
-                </View>
-                <View style={styles.templateActions}>
-                  <Pressable
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push({ pathname: '/edit-template', params: { templateId: template.id } });
-                    }}
-                    hitSlop={8}
-                  >
-                    <Feather name="edit-2" size={16} color={Colors.textSecondary} />
-                  </Pressable>
-                  {!template.isDefault && (
-                    <>
-                      <Pressable
-                        onPress={async () => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          await makeDefaultTemplate(template.id);
-                        }}
-                        hitSlop={8}
-                      >
-                        <Ionicons name="star-outline" size={18} color={Colors.warning} />
-                      </Pressable>
-                      <Pressable
-                        onPress={() => handleDeleteTemplate(template.id, template.name)}
-                        hitSlop={8}
-                      >
-                        <Feather name="trash-2" size={16} color={Colors.textTertiary} />
-                      </Pressable>
-                    </>
-                  )}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Services Offered</Text>
+          <View style={styles.card}>
+            {[
+              { num: '1', service: 'Power point install / repair' },
+              { num: '2', service: 'Ceiling fan install' },
+              { num: '3', service: 'Lights not working' },
+              { num: '4', service: 'Switchboard issue' },
+              { num: '5', service: 'Power outage / urgent fault' },
+              { num: '6', service: 'Smoke alarm install' },
+              { num: '7', service: 'Other (customer describes)' },
+            ].map((item, idx) => (
+              <View key={item.num}>
+                {idx > 0 && <View style={styles.serviceDivider} />}
+                <View style={styles.serviceRow}>
+                  <View style={styles.serviceNum}>
+                    <Text style={styles.serviceNumText}>{item.num}</Text>
+                  </View>
+                  <Text style={styles.serviceText}>{item.service}</Text>
                 </View>
               </View>
-              <Text style={styles.templateMessage} numberOfLines={3}>{template.message}</Text>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Twilio Webhook</Text>
+          <View style={styles.card}>
+            <View style={styles.webhookInfo}>
+              <Ionicons name="information-circle-outline" size={18} color={Colors.primaryLight} />
+              <Text style={styles.webhookText}>
+                Set your Twilio incoming SMS webhook URL to:{'\n'}
+                <Text style={styles.webhookUrl}>[your-app-url]/api/twilio/webhook</Text>
+              </Text>
             </View>
-          ))}
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -224,11 +231,6 @@ const styles = StyleSheet.create({
   section: {
     gap: 8,
     marginBottom: 8,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   sectionTitle: {
     fontSize: 14,
@@ -300,53 +302,89 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.accent,
     paddingVertical: 4,
   },
-  templateCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
-    gap: 8,
-  },
-  templateHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  templateNameRow: {
+  flowStep: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
   },
-  templateName: {
-    fontSize: 15,
-    fontFamily: 'Inter_600SemiBold',
-    color: Colors.text,
+  flowStepNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  defaultBadge: {
-    backgroundColor: Colors.accent,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  defaultBadgeText: {
-    fontSize: 10,
+  flowStepNumberText: {
+    fontSize: 13,
     fontFamily: 'Inter_700Bold',
     color: Colors.white,
   },
-  templateActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
+  flowStepContent: {
+    flex: 1,
+    gap: 1,
   },
-  templateMessage: {
+  flowStepTitle: {
     fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+  },
+  flowStepDesc: {
+    fontSize: 12,
     fontFamily: 'Inter_400Regular',
     color: Colors.textSecondary,
+  },
+  flowDivider: {
+    width: 2,
+    height: 16,
+    backgroundColor: Colors.borderLight,
+    marginLeft: 13,
+    marginVertical: 2,
+  },
+  serviceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  serviceNum: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  serviceNumText: {
+    fontSize: 12,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.text,
+  },
+  serviceText: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+    flex: 1,
+  },
+  serviceDivider: {
+    height: 1,
+    backgroundColor: Colors.borderLight,
+    marginVertical: 4,
+  },
+  webhookInfo: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  webhookText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    flex: 1,
     lineHeight: 20,
+  },
+  webhookUrl: {
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.accent,
   },
   aboutRow: {
     flexDirection: 'row',

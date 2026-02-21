@@ -19,6 +19,7 @@ function RootLayoutNav() {
       <Stack.Screen name="send-sms" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="add-call" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="edit-template" options={{ headerShown: false, presentation: 'modal' }} />
+      <Stack.Screen name="conversation" options={{ headerShown: false }} />
     </Stack>
   );
 }
