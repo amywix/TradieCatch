@@ -54,9 +54,17 @@ Preferred communication style: Simple, everyday language.
 ### SMS Conversation Engine (`server/sms-conversation.ts`)
 - Implements a state machine for automated SMS conversations with callers
 - States: none → awaiting_service → awaiting_sub_option → awaiting_urgency → awaiting_other_description → awaiting_address → awaiting_time → completed
-- Presents menu of electrical services (power points, ceiling fans, lights, switchboard, etc.)
+- Services are **dynamic** - stored in the `settings.services` JSONB column and editable from the Settings screen
+- Services containing "urgent"/"emergency"/"power outage" in the name trigger the urgency flow
+- A service named "Other" (case-insensitive) triggers the free-text description flow
 - Collects service details, urgency, address, and preferred time
 - Automatically creates jobs from completed conversations
+
+### Services Management
+- Services are stored as a JSONB array in the `settings` table (`services` column)
+- Default services: Power point install/repair, Ceiling fan install, Lights not working, Switchboard issue, Power outage/urgent fault, Smoke alarm install, Other
+- API: `GET /api/services` and `PUT /api/services` (body: `{ services: string[] }`)
+- Frontend: Editable in Settings screen with add, edit, delete, and reorder capabilities
 
 ### Local Storage Fallback (`lib/storage.ts`)
 - AsyncStorage-based local storage implementation exists as a fallback/offline layer
