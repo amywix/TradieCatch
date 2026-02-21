@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput, Switch, Platform,
-  Alert, Clipboard,
+  Alert,
 } from 'react-native';
+import * as ExpoClipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -93,13 +94,9 @@ export default function SettingsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [services, updateServices]);
 
-  const handleCopyWebhookUrl = useCallback(() => {
+  const handleCopyWebhookUrl = useCallback(async () => {
     const url = `${Platform.OS === 'web' ? window.location.origin : '[your-published-app-url]'}/api/twilio/webhook`;
-    if (Platform.OS === 'web') {
-      navigator.clipboard?.writeText(url);
-    } else {
-      Clipboard.setString(url);
-    }
+    await ExpoClipboard.setStringAsync(url);
     setWebhookCopied(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setTimeout(() => setWebhookCopied(false), 2000);
