@@ -3,13 +3,6 @@ import { db } from "./db";
 import { missedCalls, jobs, settings } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-
-const TWILIO_PHONE = process.env.TWILIO_PHONE_NUMBER || "";
-
 const SERVICES: Record<string, string> = {
   "1": "Power point install / repair",
   "2": "Ceiling fan install",
@@ -20,9 +13,13 @@ const SERVICES: Record<string, string> = {
   "7": "Other",
 };
 
-async function getBusinessName(): Promise<string> {
+async function getTwilioConfig() {
   const rows = await db.select().from(settings).where(eq(settings.id, "default"));
-  return rows[0]?.businessName || "Your Local Sparky";
+  const s = rows[0];
+  const sid = s?.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "";
+  const token = s?.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "";
+  const phone = s?.twilioPhoneNumber || process.env.TWILIO_PHONE_NUMBER || "";
+  return { sid, token, phone, businessName: s?.businessName || "Your Local Sparky" };
 }
 
 function addLogEntry(log: Array<{role: string; message: string; timestamp: string}>, role: string, message: string) {
@@ -31,10 +28,15 @@ function addLogEntry(log: Array<{role: string; message: string; timestamp: strin
 }
 
 export async function sendSms(to: string, body: string): Promise<void> {
+  const { sid, token, phone } = await getTwilioConfig();
+  if (!sid || !token || !phone) {
+    throw new Error("Twilio credentials not configured. Please set them up in Settings.");
+  }
+  const client = twilio(sid, token);
   try {
     await client.messages.create({
       body,
-      from: TWILIO_PHONE,
+      from: phone,
       to,
     });
     console.log(`SMS sent to ${to}: ${body.substring(0, 50)}...`);
@@ -49,9 +51,9 @@ export async function sendInitialMissedCallSms(callId: string): Promise<void> {
   const call = rows[0];
   if (!call) throw new Error("Call not found");
 
-  const businessName = await getBusinessName();
+  const { businessName } = await getTwilioConfig();
 
-  const message = `Hi 👋 Sorry we missed your call!\nThis is ${businessName} ⚡\nWhat can we help you with today?\n\nReply with the number below 👇\n\n1️⃣ Power point install / repair\n2️⃣ Ceiling fan install\n3️⃣ Lights not working\n4️⃣ Switchboard issue\n5️⃣ Power outage / urgent fault\n6️⃣ Smoke alarm install\n7️⃣ Other (type your issue)`;
+  const message = `Hi! Sorry we missed your call!\nThis is ${businessName}\nWhat can we help you with today?\n\nReply with the number below:\n\n1. Power point install / repair\n2. Ceiling fan install\n3. Lights not working\n4. Switchboard issue\n5. Power outage / urgent fault\n6. Smoke alarm install\n7. Other (type your issue)`;
 
   await sendSms(call.phoneNumber, message);
 
@@ -100,20 +102,20 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
         updates.selectedService = service;
 
         if (choice === "5") {
-          response = `⚠️ Thanks for letting us know.\nIs this an emergency right now?\n\nReply YES if urgent or NO if it can wait.\n\nIf urgent, we'll prioritise your job immediately.`;
+          response = `Thanks for letting us know.\nIs this an emergency right now?\n\nReply YES if urgent or NO if it can wait.\n\nIf urgent, we'll prioritise your job immediately.`;
           newState = "awaiting_urgency";
         } else if (choice === "2") {
-          response = `Great 👍 Ceiling fan install.\n\nIs this:\nA) New install (no existing fan)\nB) Replacement of old fan\n\nPlease reply A or B.`;
+          response = `Great! Ceiling fan install.\n\nIs this:\nA) New install (no existing fan)\nB) Replacement of old fan\n\nPlease reply A or B.`;
           newState = "awaiting_sub_option";
         } else if (choice === "7") {
-          response = `No worries! Please type a brief description of what you need help with and we'll get back to you 👍`;
+          response = `No worries! Please type a brief description of what you need help with and we'll get back to you.`;
           newState = "awaiting_other_description";
         } else {
-          response = `Great 👍 ${service}.\n\nPerfect 👍\n\n📍 What's the address for the job?`;
+          response = `Great! ${service}.\n\nWhat's the address for the job?`;
           newState = "awaiting_address";
         }
       } else {
-        response = `Sorry, I didn't catch that. Please reply with a number from 1-7:\n\n1️⃣ Power point install / repair\n2️⃣ Ceiling fan install\n3️⃣ Lights not working\n4️⃣ Switchboard issue\n5️⃣ Power outage / urgent fault\n6️⃣ Smoke alarm install\n7️⃣ Other (type your issue)`;
+        response = `Sorry, I didn't catch that. Please reply with a number from 1-7:\n\n1. Power point install / repair\n2. Ceiling fan install\n3. Lights not working\n4. Switchboard issue\n5. Power outage / urgent fault\n6. Smoke alarm install\n7. Other (type your issue)`;
         newState = "awaiting_service";
       }
       break;
@@ -124,7 +126,7 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
       if (option === "A" || option === "B") {
         const subDesc = option === "A" ? "New install (no existing fan)" : "Replacement of old fan";
         updates.selectedSubOption = subDesc;
-        response = `Perfect 👍 ${subDesc}.\n\n📍 What's the address for the job?`;
+        response = `Perfect! ${subDesc}.\n\nWhat's the address for the job?`;
         newState = "awaiting_address";
       } else {
         response = `Please reply A or B:\n\nA) New install (no existing fan)\nB) Replacement of old fan`;
@@ -137,11 +139,11 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
       const upper = reply.toUpperCase();
       if (upper.includes("YES") || upper.includes("URGENT") || upper.includes("ASAP")) {
         updates.isUrgent = true;
-        response = `🚨 We're treating this as urgent. Our team will call you ASAP.\n\n📍 What's the address so we can head your way?`;
+        response = `We're treating this as urgent. Our team will call you ASAP.\n\nWhat's the address so we can head your way?`;
         newState = "awaiting_address";
       } else if (upper.includes("NO") || upper.includes("WAIT") || upper.includes("LATER")) {
         updates.isUrgent = false;
-        response = `No worries 👍 We'll schedule you in.\n\n📍 What's the address for the job?`;
+        response = `No worries, we'll schedule you in.\n\nWhat's the address for the job?`;
         newState = "awaiting_address";
       } else {
         response = `Please reply YES if this is urgent, or NO if it can wait.`;
@@ -152,14 +154,14 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
 
     case "awaiting_other_description": {
       updates.selectedService = `Other: ${reply}`;
-      response = `Got it 👍\n\n📍 What's the address for the job?`;
+      response = `Got it!\n\nWhat's the address for the job?`;
       newState = "awaiting_address";
       break;
     }
 
     case "awaiting_address": {
       updates.jobAddress = reply;
-      response = `And what's the best time:\n1️⃣ Morning\n2️⃣ Afternoon\n3️⃣ ASAP`;
+      response = `And what's the best time:\n1. Morning\n2. Afternoon\n3. ASAP`;
       newState = "awaiting_time";
       break;
     }
@@ -176,8 +178,8 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
 
       updates.selectedTime = timeLabel;
 
-      const businessName = await getBusinessName();
-      response = `Thanks! We've received your request 🙌\n\nOur team will confirm your booking shortly.${call.isUrgent || updates.isUrgent ? "\n\n🚨 If urgent, we'll call you ASAP." : ""}\n\n- ${businessName}`;
+      const { businessName } = await getTwilioConfig();
+      response = `Thanks! We've received your request.\n\nOur team will confirm your booking shortly.${call.isUrgent || updates.isUrgent ? "\n\nIf urgent, we'll call you ASAP." : ""}\n\n- ${businessName}`;
       newState = "completed";
 
       const today = new Date();
@@ -201,7 +203,7 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
     }
 
     case "completed": {
-      const businessName = await getBusinessName();
+      const { businessName } = await getTwilioConfig();
       response = `Thanks for your message! Your booking is already logged. Our team will be in touch shortly.\n\n- ${businessName}`;
       newState = "completed";
       break;

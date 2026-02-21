@@ -60,6 +60,10 @@ export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default("default"),
   businessName: text("business_name").default("").notNull(),
   autoReplyEnabled: boolean("auto_reply_enabled").default(true).notNull(),
+  onboardingComplete: boolean("onboarding_complete").default(false).notNull(),
+  twilioAccountSid: text("twilio_account_sid").default(""),
+  twilioAuthToken: text("twilio_auth_token").default(""),
+  twilioPhoneNumber: text("twilio_phone_number").default(""),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
