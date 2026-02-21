@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
-import { missedCalls, jobs, settings, smsTemplates } from "@shared/schema";
+import { missedCalls, jobs, settings, smsTemplates, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
 
@@ -104,9 +104,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ ok: true });
   });
 
+  app.get("/api/services", async (_req: Request, res: Response) => {
+    const [row] = await db.select().from(settings).where(eq(settings.id, "default"));
+    const services = (row?.services as string[]) || DEFAULT_SERVICES;
+    res.json(services);
+  });
+
+  app.put("/api/services", async (req: Request, res: Response) => {
+    const { services: newServices } = req.body;
+    if (!Array.isArray(newServices) || newServices.length === 0) {
+      return res.status(400).json({ error: "Services must be a non-empty array" });
+    }
+    const cleaned = newServices.map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+    const [row] = await db.update(settings).set({ services: cleaned }).where(eq(settings.id, "default")).returning();
+    res.json((row.services as string[]) || cleaned);
+  });
+
   app.get("/api/settings", async (_req: Request, res: Response) => {
     const [row] = await db.select().from(settings).where(eq(settings.id, "default"));
-    res.json(row || { id: "default", businessName: "", autoReplyEnabled: true });
+    res.json(row || { id: "default", businessName: "", autoReplyEnabled: true, services: DEFAULT_SERVICES });
   });
 
   app.patch("/api/settings", async (req: Request, res: Response) => {
@@ -164,7 +180,10 @@ async function seedDefaults() {
       id: "default",
       businessName: "",
       autoReplyEnabled: true,
+      services: DEFAULT_SERVICES,
     });
+  } else if (!existingSettings[0].services) {
+    await db.update(settings).set({ services: DEFAULT_SERVICES }).where(eq(settings.id, "default"));
   }
 
   const existingTemplates = await db.select().from(smsTemplates);

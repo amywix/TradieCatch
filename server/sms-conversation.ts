@@ -1,17 +1,28 @@
 import twilio from "twilio";
 import { db } from "./db";
-import { missedCalls, jobs, settings } from "@shared/schema";
+import { missedCalls, jobs, settings, DEFAULT_SERVICES } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
-const SERVICES: Record<string, string> = {
-  "1": "Power point install / repair",
-  "2": "Ceiling fan install",
-  "3": "Lights not working",
-  "4": "Switchboard issue",
-  "5": "Power outage / urgent fault",
-  "6": "Smoke alarm install",
-  "7": "Other",
-};
+async function getServices(): Promise<string[]> {
+  const rows = await db.select().from(settings).where(eq(settings.id, "default"));
+  const s = rows[0];
+  return (s?.services as string[]) || DEFAULT_SERVICES;
+}
+
+function buildServicesMap(servicesList: string[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  servicesList.forEach((s, i) => {
+    map[String(i + 1)] = s;
+  });
+  return map;
+}
+
+function buildServicesMenuText(servicesList: string[]): string {
+  return servicesList.map((s, i) => {
+    const label = s.toLowerCase() === "other" ? `${i + 1}. Other (type your issue)` : `${i + 1}. ${s}`;
+    return label;
+  }).join("\n");
+}
 
 async function getTwilioConfig() {
   const rows = await db.select().from(settings).where(eq(settings.id, "default"));
@@ -52,8 +63,10 @@ export async function sendInitialMissedCallSms(callId: string): Promise<void> {
   if (!call) throw new Error("Call not found");
 
   const { businessName } = await getTwilioConfig();
+  const servicesList = await getServices();
+  const menuText = buildServicesMenuText(servicesList);
 
-  const message = `Hi! Sorry we missed your call!\nThis is ${businessName}\nWhat can we help you with today?\n\nReply with the number below:\n\n1. Power point install / repair\n2. Ceiling fan install\n3. Lights not working\n4. Switchboard issue\n5. Power outage / urgent fault\n6. Smoke alarm install\n7. Other (type your issue)`;
+  const message = `Hi! Sorry we missed your call!\nThis is ${businessName}\nWhat can we help you with today?\n\nReply with the number below:\n\n${menuText}`;
 
   await sendSms(call.phoneNumber, message);
 
@@ -94,20 +107,23 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
   let newState = state;
   let updates: Record<string, any> = {};
 
+  const servicesList = await getServices();
+  const SERVICES = buildServicesMap(servicesList);
+  const maxChoice = servicesList.length;
+  const choiceRegex = new RegExp(`[^1-${maxChoice}]`, "g");
+
   switch (state) {
     case "awaiting_service": {
-      const choice = reply.replace(/[^1-7]/g, "");
+      const choice = reply.replace(choiceRegex, "");
       if (choice && SERVICES[choice]) {
         const service = SERVICES[choice];
         updates.selectedService = service;
+        const serviceLower = service.toLowerCase();
 
-        if (choice === "5") {
+        if (serviceLower.includes("urgent") || serviceLower.includes("emergency") || serviceLower.includes("power outage")) {
           response = `Thanks for letting us know.\nIs this an emergency right now?\n\nReply YES if urgent or NO if it can wait.\n\nIf urgent, we'll prioritise your job immediately.`;
           newState = "awaiting_urgency";
-        } else if (choice === "2") {
-          response = `Great! Ceiling fan install.\n\nIs this:\nA) New install (no existing fan)\nB) Replacement of old fan\n\nPlease reply A or B.`;
-          newState = "awaiting_sub_option";
-        } else if (choice === "7") {
+        } else if (serviceLower === "other") {
           response = `No worries! Please type a brief description of what you need help with and we'll get back to you.`;
           newState = "awaiting_other_description";
         } else {
@@ -115,7 +131,8 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
           newState = "awaiting_address";
         }
       } else {
-        response = `Sorry, I didn't catch that. Please reply with a number from 1-7:\n\n1. Power point install / repair\n2. Ceiling fan install\n3. Lights not working\n4. Switchboard issue\n5. Power outage / urgent fault\n6. Smoke alarm install\n7. Other (type your issue)`;
+        const menuText = buildServicesMenuText(servicesList);
+        response = `Sorry, I didn't catch that. Please reply with a number from 1-${maxChoice}:\n\n${menuText}`;
         newState = "awaiting_service";
       }
       break;
