@@ -10,8 +10,9 @@ import Colors from '@/constants/colors';
 import { useData } from '@/lib/data-context';
 
 const JOB_TYPES = [
-  'Plumbing', 'Electrical', 'Carpentry', 'Painting', 'Tiling',
-  'Roofing', 'Landscaping', 'Cleaning', 'HVAC', 'General',
+  'Power point install/repair', 'Ceiling fan install', 'Lights not working',
+  'Switchboard issue', 'Power outage', 'Smoke alarm install',
+  'Safety inspection', 'Rewiring', 'General electrical',
 ];
 
 export default function BookJobScreen() {
