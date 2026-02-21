@@ -8,6 +8,12 @@ import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversatio
 export async function registerRoutes(app: Express): Promise<Server> {
   await seedDefaults();
 
+  app.get("/api/config", async (_req: Request, res: Response) => {
+    res.json({
+      revenueCatApiKey: process.env.REVENUECAT_API_KEY || "",
+    });
+  });
+
   app.get("/api/missed-calls", async (_req: Request, res: Response) => {
     const rows = await db.select().from(missedCalls).orderBy(desc(missedCalls.timestamp));
     res.json(rows);

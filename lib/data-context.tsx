@@ -37,6 +37,10 @@ export interface AppSettings {
   id: string;
   businessName: string;
   autoReplyEnabled: boolean;
+  onboardingComplete: boolean;
+  twilioAccountSid: string;
+  twilioAuthToken: string;
+  twilioPhoneNumber: string;
 }
 
 interface DataContextValue {
@@ -63,6 +67,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   id: 'default',
   businessName: '',
   autoReplyEnabled: true,
+  onboardingComplete: false,
+  twilioAccountSid: '',
+  twilioAuthToken: '',
+  twilioPhoneNumber: '',
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {

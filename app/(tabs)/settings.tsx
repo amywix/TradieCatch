@@ -177,6 +177,29 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Twilio Connection</Text>
+          <View style={styles.card}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIcon, { backgroundColor: settings.twilioAccountSid ? '#E8F8ED' : '#FFEEEE' }]}>
+                  <Ionicons
+                    name={settings.twilioAccountSid ? 'checkmark-circle' : 'alert-circle-outline'}
+                    size={18}
+                    color={settings.twilioAccountSid ? Colors.success : Colors.danger}
+                  />
+                </View>
+                <View style={styles.settingContent}>
+                  <Text style={styles.settingLabel}>SMS Status</Text>
+                  <Text style={styles.settingValue}>
+                    {settings.twilioAccountSid ? 'Connected' : 'Not configured'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Twilio Webhook</Text>
           <View style={styles.card}>
             <View style={styles.webhookInfo}>

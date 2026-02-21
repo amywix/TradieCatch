@@ -1,10 +1,10 @@
 import { isLiquidGlassAvailable } from "expo-glass-effect";
-import { Tabs } from "expo-router";
+import { Tabs, router } from "expo-router";
 import { NativeTabs, Icon, Label, Badge } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
 import { Platform, StyleSheet, useColorScheme, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useData } from "@/lib/data-context";
 import Colors from "@/constants/colors";
 
@@ -103,6 +103,18 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
+  const { settings, isLoading } = useData();
+  const hasRedirected = useRef(false);
+
+  useEffect(() => {
+    if (isLoading || hasRedirected.current) return;
+
+    if (!settings.onboardingComplete) {
+      hasRedirected.current = true;
+      router.replace('/paywall');
+    }
+  }, [isLoading, settings.onboardingComplete]);
+
   if (isLiquidGlassAvailable()) {
     return <NativeTabLayout />;
   }
