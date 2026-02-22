@@ -75,6 +75,11 @@ export const settings = pgTable("settings", {
   twilioAuthToken: text("twilio_auth_token").default(""),
   twilioPhoneNumber: text("twilio_phone_number").default(""),
   services: jsonb("services").$type<string[]>().default(DEFAULT_SERVICES),
+  bookingCalendarEnabled: boolean("booking_calendar_enabled").default(false).notNull(),
+  bookingSlots: jsonb("booking_slots").$type<string[]>().default([
+    "8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM",
+    "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"
+  ]),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({

@@ -9,6 +9,34 @@ async function getServices(): Promise<string[]> {
   return (s?.services as string[]) || DEFAULT_SERVICES;
 }
 
+async function getBookingConfig(): Promise<{ enabled: boolean; slots: string[] }> {
+  const rows = await db.select().from(settings).where(eq(settings.id, "default"));
+  const s = rows[0];
+  return {
+    enabled: s?.bookingCalendarEnabled ?? false,
+    slots: (s?.bookingSlots as string[]) || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
+  };
+}
+
+function getNextAvailableDates(count: number = 5): { label: string; dateStr: string }[] {
+  const dates: { label: string; dateStr: string }[] = [];
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const now = new Date();
+  let d = new Date(now);
+  d.setDate(d.getDate() + 1);
+  while (dates.length < count) {
+    if (d.getDay() !== 0) {
+      dates.push({
+        label: `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`,
+        dateStr: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+      });
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return dates;
+}
+
 function buildServicesMap(servicesList: string[]): Record<string, string> {
   const map: Record<string, string> = {};
   servicesList.forEach((s, i) => {
@@ -187,8 +215,72 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
 
     case "awaiting_address": {
       updates.jobAddress = reply;
-      response = `And what's the best time:\n1. Morning\n2. Afternoon\n3. ASAP`;
-      newState = "awaiting_time";
+      const booking = await getBookingConfig();
+      if (booking.enabled) {
+        const dates = getNextAvailableDates(5);
+        const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+        response = `What day works best for you?\n\n${dateMenu}`;
+        newState = "awaiting_booking_date";
+      } else {
+        response = `And what's the best time:\n1. Morning\n2. Afternoon\n3. ASAP`;
+        newState = "awaiting_time";
+      }
+      break;
+    }
+
+    case "awaiting_booking_date": {
+      const dates = getNextAvailableDates(5);
+      const dateChoice = reply.replace(/[^1-5]/g, "");
+      const idx = parseInt(dateChoice, 10) - 1;
+      if (idx >= 0 && idx < dates.length) {
+        updates.selectedTime = dates[idx].label;
+        const booking = await getBookingConfig();
+        const slotMenu = booking.slots.map((s, i) => `${i + 1}. ${s}`).join("\n");
+        response = `Great, ${dates[idx].label}!\n\nWhat time suits you?\n\n${slotMenu}`;
+        newState = "awaiting_booking_slot";
+      } else {
+        const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+        response = `Please reply with a number from 1-${dates.length}:\n\n${dateMenu}`;
+        newState = "awaiting_booking_date";
+      }
+      break;
+    }
+
+    case "awaiting_booking_slot": {
+      const booking = await getBookingConfig();
+      const slotIdx = parseInt(reply.replace(/[^0-9]/g, ""), 10) - 1;
+      if (slotIdx >= 0 && slotIdx < booking.slots.length) {
+        const timeSlot = booking.slots[slotIdx];
+        const dateLabel = call.selectedTime || updates.selectedTime || "";
+        const dates = getNextAvailableDates(5);
+        const matchedDate = dates.find(d => d.label === dateLabel);
+        const dateStr = matchedDate?.dateStr || new Date().toISOString().split("T")[0];
+
+        updates.selectedTime = `${dateLabel} ${timeSlot}`;
+
+        const { businessName } = await getTwilioConfig();
+        response = `Booked! ${dateLabel} at ${timeSlot}.\n\nWe've confirmed your appointment.${call.isUrgent || updates.isUrgent ? "\n\nMarked as urgent - we'll prioritise this." : ""}\n\n- ${businessName}`;
+        newState = "completed";
+
+        await db.insert(jobs).values({
+          callerName: call.callerName,
+          phoneNumber: call.phoneNumber,
+          jobType: call.selectedService || updates.selectedService || "General",
+          date: dateStr,
+          time: timeSlot,
+          address: call.jobAddress || updates.jobAddress || "",
+          notes: call.selectedSubOption || updates.selectedSubOption || "",
+          status: "confirmed",
+          missedCallId: call.id,
+          isUrgent: call.isUrgent || updates.isUrgent || false,
+        });
+
+        updates.jobBooked = true;
+      } else {
+        const slotMenu = booking.slots.map((s, i) => `${i + 1}. ${s}`).join("\n");
+        response = `Please reply with a number from 1-${booking.slots.length}:\n\n${slotMenu}`;
+        newState = "awaiting_booking_slot";
+      }
       break;
     }
 

@@ -42,6 +42,8 @@ export interface AppSettings {
   twilioAuthToken: string;
   twilioPhoneNumber: string;
   services: string[];
+  bookingCalendarEnabled: boolean;
+  bookingSlots: string[];
 }
 
 interface DataContextValue {
@@ -75,6 +77,11 @@ const DEFAULT_SERVICES = [
   "Other",
 ];
 
+const DEFAULT_BOOKING_SLOTS = [
+  "8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM",
+  "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM",
+];
+
 const DEFAULT_SETTINGS: AppSettings = {
   id: 'default',
   businessName: '',
@@ -84,6 +91,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   twilioAuthToken: '',
   twilioPhoneNumber: '',
   services: DEFAULT_SERVICES,
+  bookingCalendarEnabled: false,
+  bookingSlots: DEFAULT_BOOKING_SLOTS,
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
