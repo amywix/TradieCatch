@@ -79,6 +79,16 @@ Preferred communication style: Simple, everyday language.
 - **Server Build**: esbuild bundles server to `server_dist/`
 - **Landing Page**: Static HTML template served when accessing from non-app browsers
 
+### Subscription System (RevenueCat)
+- **Package**: `react-native-purchases` for RevenueCat integration
+- **Context**: `lib/subscription-context.tsx` provides `useSubscription()` hook with `isPro`, `isLoading`, `purchasePackage`, `restorePurchases`, `checkSubscription`
+- **Entitlement ID**: `pro` - checked against RevenueCat customer info
+- **Paywall**: `app/paywall.tsx` - $99/month subscription screen with free trial option, restore purchases, and skip option
+- **Premium gating**: Tabs layout redirects to paywall if onboarding not complete; subscription state managed via `SubscriptionProvider` wrapping the app
+- **Settings integration**: Subscription section in Settings shows current plan status and upgrade button
+- **API Key**: Fetched from server via `GET /api/config` which reads `REVENUECAT_API_KEY` env var
+- **RevenueCat works in Expo Go** via Preview API Mode - no native build required
+
 ## External Dependencies
 
 ### Twilio (SMS)
