@@ -48,6 +48,49 @@ export default function SettingsScreen() {
     await updateAppSettings({ autoReplyEnabled: value });
   }, [updateAppSettings]);
 
+  const handleToggleBookingCalendar = useCallback(async (value: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await updateAppSettings({ bookingCalendarEnabled: value });
+  }, [updateAppSettings]);
+
+  const bookingSlots = settings.bookingSlots || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
+  const [editingSlotIdx, setEditingSlotIdx] = useState<number | null>(null);
+  const [editingSlotText, setEditingSlotText] = useState('');
+  const [addingSlot, setAddingSlot] = useState(false);
+  const [newSlotText, setNewSlotText] = useState('');
+
+  const handleSaveSlotEdit = useCallback(async () => {
+    if (editingSlotIdx === null) return;
+    const trimmed = editingSlotText.trim();
+    if (!trimmed) return;
+    const updated = [...bookingSlots];
+    updated[editingSlotIdx] = trimmed;
+    await updateAppSettings({ bookingSlots: updated });
+    setEditingSlotIdx(null);
+    setEditingSlotText('');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [editingSlotIdx, editingSlotText, bookingSlots, updateAppSettings]);
+
+  const handleAddSlot = useCallback(async () => {
+    const trimmed = newSlotText.trim();
+    if (!trimmed) return;
+    const updated = [...bookingSlots, trimmed];
+    await updateAppSettings({ bookingSlots: updated });
+    setNewSlotText('');
+    setAddingSlot(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [newSlotText, bookingSlots, updateAppSettings]);
+
+  const handleDeleteSlot = useCallback(async (idx: number) => {
+    if (bookingSlots.length <= 1) {
+      Alert.alert("Can't Remove", "You need at least one time slot.");
+      return;
+    }
+    const updated = bookingSlots.filter((_: string, i: number) => i !== idx);
+    await updateAppSettings({ bookingSlots: updated });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [bookingSlots, updateAppSettings]);
+
   const handleEditService = useCallback((idx: number) => {
     setEditingServiceIdx(idx);
     setEditingServiceText(services[idx]);
@@ -503,6 +546,175 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Booking Calendar</Text>
+          <View style={styles.card}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIcon, { backgroundColor: '#EDE8F8' }]}>
+                  <Ionicons name="calendar-outline" size={18} color="#7C5CBF" />
+                </View>
+                <View style={styles.settingContent}>
+                  <Text style={styles.settingLabel}>Self-Service Booking</Text>
+                  <Text style={styles.settingDescription}>
+                    Let customers pick a date and time slot via SMS
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={settings.bookingCalendarEnabled}
+                onValueChange={handleToggleBookingCalendar}
+                trackColor={{ false: Colors.border, true: Colors.accent }}
+                thumbColor={Colors.white}
+              />
+            </View>
+          </View>
+          {settings.bookingCalendarEnabled && (
+            <>
+              <View style={[styles.sectionHeader, { marginTop: 8 }]}>
+                <Text style={[styles.sectionHint, { fontFamily: 'Inter_600SemiBold', color: Colors.textSecondary }]}>Time Slots</Text>
+                <Pressable
+                  style={styles.addButton}
+                  onPress={() => { setAddingSlot(true); setNewSlotText(''); }}
+                  hitSlop={8}
+                >
+                  <Ionicons name="add-circle" size={22} color={Colors.accent} />
+                </Pressable>
+              </View>
+              <Text style={styles.sectionHint}>
+                These time slots are offered to customers when they book via SMS.
+              </Text>
+              <View style={styles.card}>
+                {bookingSlots.map((slot: string, idx: number) => (
+                  <View key={`slot-${idx}`}>
+                    {idx > 0 && <View style={styles.serviceDivider} />}
+                    {editingSlotIdx === idx ? (
+                      <View style={styles.serviceEditRow}>
+                        <View style={styles.serviceNum}>
+                          <Text style={styles.serviceNumText}>{idx + 1}</Text>
+                        </View>
+                        <TextInput
+                          style={styles.serviceEditInput}
+                          value={editingSlotText}
+                          onChangeText={setEditingSlotText}
+                          autoFocus
+                          onSubmitEditing={handleSaveSlotEdit}
+                          placeholder="e.g. 9:00 AM"
+                          placeholderTextColor={Colors.textTertiary}
+                        />
+                        <Pressable onPress={handleSaveSlotEdit} hitSlop={8}>
+                          <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
+                        </Pressable>
+                        <Pressable onPress={() => { setEditingSlotIdx(null); setEditingSlotText(''); }} hitSlop={8}>
+                          <Ionicons name="close-circle" size={22} color={Colors.textTertiary} />
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <View style={styles.serviceRow}>
+                        <View style={styles.serviceNum}>
+                          <Text style={styles.serviceNumText}>{idx + 1}</Text>
+                        </View>
+                        <Pressable style={styles.serviceTextWrap} onPress={() => { setEditingSlotIdx(idx); setEditingSlotText(slot); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
+                          <Text style={styles.serviceText}>{slot}</Text>
+                        </Pressable>
+                        <View style={styles.serviceActions}>
+                          <Pressable onPress={() => { setEditingSlotIdx(idx); setEditingSlotText(slot); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} hitSlop={6}>
+                            <Feather name="edit-2" size={14} color={Colors.textTertiary} />
+                          </Pressable>
+                          <Pressable onPress={() => handleDeleteSlot(idx)} hitSlop={6}>
+                            <Ionicons name="trash-outline" size={16} color={Colors.danger} />
+                          </Pressable>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                ))}
+                {addingSlot && (
+                  <>
+                    <View style={styles.serviceDivider} />
+                    <View style={styles.serviceEditRow}>
+                      <View style={[styles.serviceNum, { backgroundColor: Colors.accent + '20' }]}>
+                        <Ionicons name="add" size={14} color={Colors.accent} />
+                      </View>
+                      <TextInput
+                        style={styles.serviceEditInput}
+                        value={newSlotText}
+                        onChangeText={setNewSlotText}
+                        autoFocus
+                        onSubmitEditing={handleAddSlot}
+                        placeholder="e.g. 5:00 PM"
+                        placeholderTextColor={Colors.textTertiary}
+                      />
+                      <Pressable onPress={handleAddSlot} hitSlop={8}>
+                        <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
+                      </Pressable>
+                      <Pressable onPress={() => { setAddingSlot(false); setNewSlotText(''); }} hitSlop={8}>
+                        <Ionicons name="close-circle" size={22} color={Colors.textTertiary} />
+                      </Pressable>
+                    </View>
+                  </>
+                )}
+              </View>
+            </>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Call Diversion Setup</Text>
+          <View style={styles.card}>
+            <View style={styles.webhookIntro}>
+              <Ionicons name="call-outline" size={20} color={Colors.primaryLight} />
+              <Text style={styles.webhookIntroText}>
+                Set up call forwarding on your mobile so unanswered calls go to your Twilio number. This triggers the auto-SMS flow.
+              </Text>
+            </View>
+
+            <View style={styles.webhookStepsDivider} />
+
+            <Text style={[styles.webhookStepTitle, { marginBottom: 8 }]}>iPhone</Text>
+            <View style={styles.diversionStep}>
+              <Text style={styles.diversionStepText}>1. Open your Phone app and go to <Text style={styles.diversionBold}>Settings {'>'} Phone {'>'} Call Forwarding</Text></Text>
+            </View>
+            <View style={styles.diversionStep}>
+              <Text style={styles.diversionStepText}>2. Or dial from your phone:</Text>
+            </View>
+            <View style={styles.diversionCodeBox}>
+              <Text style={styles.diversionCode}>**61*{settings.twilioPhoneNumber || '[your Twilio number]'}#</Text>
+              <Text style={styles.diversionCodeLabel}>Forward when unanswered</Text>
+            </View>
+            <View style={styles.diversionCodeBox}>
+              <Text style={styles.diversionCode}>**62*{settings.twilioPhoneNumber || '[your Twilio number]'}#</Text>
+              <Text style={styles.diversionCodeLabel}>Forward when unreachable</Text>
+            </View>
+            <View style={styles.diversionCodeBox}>
+              <Text style={styles.diversionCode}>**67*{settings.twilioPhoneNumber || '[your Twilio number]'}#</Text>
+              <Text style={styles.diversionCodeLabel}>Forward when busy</Text>
+            </View>
+
+            <View style={styles.webhookStepsDivider} />
+
+            <Text style={[styles.webhookStepTitle, { marginBottom: 8 }]}>Android</Text>
+            <View style={styles.diversionStep}>
+              <Text style={styles.diversionStepText}>1. Open the <Text style={styles.diversionBold}>Phone app {'>'} Settings {'>'} Calls {'>'} Call forwarding</Text></Text>
+            </View>
+            <View style={styles.diversionStep}>
+              <Text style={styles.diversionStepText}>2. Set "Forward when unanswered", "Forward when busy", and "Forward when unreachable" to your Twilio number:</Text>
+            </View>
+            <View style={styles.diversionCodeBox}>
+              <Text style={styles.diversionCode}>{settings.twilioPhoneNumber || '[your Twilio number]'}</Text>
+            </View>
+
+            <View style={styles.webhookStepsDivider} />
+
+            <View style={styles.webhookNote}>
+              <Ionicons name="bulb-outline" size={16} color={Colors.warning} />
+              <Text style={styles.webhookNoteText}>
+                To undo call diversion, dial ##61#, ##62#, ##67# on iPhone, or turn off forwarding in Android settings. Codes may vary by carrier.
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.card}>
             <View style={styles.aboutRow}>
@@ -830,6 +1042,40 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     flex: 1,
     lineHeight: 18,
+  },
+  diversionStep: {
+    paddingLeft: 4,
+    marginBottom: 6,
+  },
+  diversionStepText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    lineHeight: 20,
+  },
+  diversionBold: {
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+  },
+  diversionCodeBox: {
+    backgroundColor: Colors.surfaceSecondary,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  diversionCode: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.accent,
+    letterSpacing: 0.3,
+  },
+  diversionCodeLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textTertiary,
+    marginTop: 3,
   },
   aboutRow: {
     flexDirection: 'row',
