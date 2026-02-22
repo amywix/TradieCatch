@@ -84,8 +84,14 @@ export async function sendInitialMissedCallSms(callId: string): Promise<void> {
 export async function handleIncomingReply(fromPhone: string, body: string): Promise<string | null> {
   const normalizedPhone = normalizePhone(fromPhone);
 
-  const rows = await db.select().from(missedCalls)
+  let rows = await db.select().from(missedCalls)
     .where(eq(missedCalls.phoneNumber, normalizedPhone));
+
+  if (rows.length === 0) {
+    const allCalls = await db.select().from(missedCalls);
+    rows = allCalls.filter(c => phonesMatch(c.phoneNumber, normalizedPhone));
+    console.log(`Phone lookup: exact match failed for "${normalizedPhone}", fuzzy matched ${rows.length} calls`);
+  }
 
   let call = rows.find(c => c.conversationState !== "none" && c.conversationState !== "completed");
 
@@ -96,7 +102,10 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
     }
   }
 
-  if (!call) return null;
+  if (!call) {
+    console.log(`No matching call found for phone: "${fromPhone}" (normalized: "${normalizedPhone}")`);
+    return null;
+  }
 
   const reply = body.trim();
   let log = (call.conversationLog || []) as Array<{role: string; message: string; timestamp: string}>;
@@ -246,6 +255,20 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
 }
 
 function normalizePhone(phone: string): string {
-  const cleaned = phone.replace(/\s/g, "");
+  const cleaned = phone.replace(/[\s\-()]/g, "");
   return cleaned;
+}
+
+function phonesMatch(a: string, b: string): boolean {
+  const cleanA = a.replace(/[\s\-()]/g, "");
+  const cleanB = b.replace(/[\s\-()]/g, "");
+  if (cleanA === cleanB) return true;
+  const digitsA = cleanA.replace(/\D/g, "");
+  const digitsB = cleanB.replace(/\D/g, "");
+  if (digitsA === digitsB) return true;
+  if (digitsA.length > 6 && digitsB.length > 6) {
+    const suffixLen = Math.min(digitsA.length, digitsB.length) - 1;
+    if (digitsA.slice(-suffixLen) === digitsB.slice(-suffixLen)) return true;
+  }
+  return false;
 }
