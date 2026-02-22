@@ -9,6 +9,7 @@ import Purchases from "react-native-purchases";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { DataProvider } from "@/lib/data-context";
+import { SubscriptionProvider } from "@/lib/subscription-context";
 import { apiRequest } from "@/lib/query-client";
 
 SplashScreen.preventAutoHideAsync();
@@ -65,7 +66,9 @@ export default function RootLayout() {
         <GestureHandlerRootView>
           <KeyboardProvider>
             <DataProvider>
-              <RootLayoutNav />
+              <SubscriptionProvider>
+                <RootLayoutNav />
+              </SubscriptionProvider>
             </DataProvider>
           </KeyboardProvider>
         </GestureHandlerRootView>

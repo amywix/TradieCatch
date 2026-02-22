@@ -9,9 +9,11 @@ import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import Purchases, { PurchasesPackage } from 'react-native-purchases';
 import Colors from '@/constants/colors';
+import { useSubscription } from '@/lib/subscription-context';
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
+  const { purchasePackage, restorePurchases } = useSubscription();
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -55,25 +57,23 @@ export default function PaywallScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const { customerInfo } = await Purchases.purchasePackage(monthlyPackage);
-      if (customerInfo.entitlements.active['pro']) {
+      const success = await purchasePackage(monthlyPackage);
+      if (success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace('/onboarding');
       }
     } catch (err: any) {
-      if (!err.userCancelled) {
-        Alert.alert('Error', 'Purchase failed. Please try again.');
-      }
+      Alert.alert('Error', 'Purchase failed. Please try again.');
     } finally {
       setPurchasing(false);
     }
-  }, [monthlyPackage]);
+  }, [monthlyPackage, purchasePackage]);
 
   const handleRestore = useCallback(async () => {
     setRestoring(true);
     try {
-      const customerInfo = await Purchases.restorePurchases();
-      if (customerInfo.entitlements.active['pro']) {
+      const success = await restorePurchases();
+      if (success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert('Restored!', 'Your subscription has been restored.', [
           { text: 'Continue', onPress: () => router.replace('/onboarding') },
@@ -86,7 +86,7 @@ export default function PaywallScreen() {
     } finally {
       setRestoring(false);
     }
-  }, []);
+  }, [restorePurchases]);
 
   const handleSkipForNow = useCallback(() => {
     router.replace('/onboarding');

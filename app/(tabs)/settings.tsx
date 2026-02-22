@@ -9,11 +9,14 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useData } from '@/lib/data-context';
+import { useSubscription } from '@/lib/subscription-context';
 import { apiRequest } from '@/lib/query-client';
+import { router } from 'expo-router';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { settings, updateAppSettings, updateServices } = useData();
+  const { isPro } = useSubscription();
   const [businessName, setBusinessName] = useState(settings.businessName);
   const [editingName, setEditingName] = useState(false);
   const [editingServiceIdx, setEditingServiceIdx] = useState<number | null>(null);
@@ -215,6 +218,37 @@ export default function SettingsScreen() {
               {!editingName && (
                 <Pressable onPress={() => setEditingName(true)} hitSlop={8}>
                   <Feather name="edit-2" size={16} color={Colors.textTertiary} />
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Subscription</Text>
+          <View style={styles.card}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIcon, { backgroundColor: isPro ? '#E8F8ED' : '#FFF0E8' }]}>
+                  <Ionicons
+                    name={isPro ? 'shield-checkmark' : 'flash'}
+                    size={18}
+                    color={isPro ? Colors.success : Colors.accent}
+                  />
+                </View>
+                <View style={styles.settingContent}>
+                  <Text style={styles.settingLabel}>{isPro ? 'TradieCatch Pro' : 'Free Plan'}</Text>
+                  <Text style={styles.settingDescription}>
+                    {isPro ? 'Your subscription is active' : 'Upgrade to unlock all features'}
+                  </Text>
+                </View>
+              </View>
+              {!isPro && (
+                <Pressable
+                  style={styles.upgradeBtn}
+                  onPress={() => router.push('/paywall')}
+                >
+                  <Text style={styles.upgradeBtnText}>Upgrade</Text>
                 </Pressable>
               )}
             </View>
@@ -1042,6 +1076,17 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     flex: 1,
     lineHeight: 18,
+  },
+  upgradeBtn: {
+    backgroundColor: Colors.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  upgradeBtnText: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.white,
   },
   diversionStep: {
     paddingLeft: 4,
