@@ -48,14 +48,15 @@ Preferred communication style: Simple, everyday language.
   - `missed_calls` - Core table tracking calls with conversation state machine fields (conversationState, selectedService, selectedSubOption, selectedTime, jobAddress, isUrgent, conversationLog as JSONB)
   - `jobs` - Booked jobs with type, date, time, address, status, urgency
   - `sms_templates` - Customizable SMS templates
-  - `settings` - Business configuration (name, auto-reply toggle)
+  - `settings` - Business configuration (name, auto-reply toggle, bookingCalendarEnabled, bookingSlots JSONB array)
 - **Migrations**: Managed via `drizzle-kit push` command
 - **Validation**: Uses `drizzle-zod` for schema-to-Zod validation
 - **Seeding**: Default templates and settings are seeded on server startup via `seedDefaults()` in routes
 
 ### SMS Conversation Engine (`server/sms-conversation.ts`)
 - Implements a state machine for automated SMS conversations with callers
-- States: none → awaiting_service → awaiting_sub_option → awaiting_urgency → awaiting_other_description → awaiting_address → awaiting_time → completed
+- States: none → awaiting_service → awaiting_sub_option → awaiting_urgency → awaiting_other_description → awaiting_address → awaiting_booking_date → awaiting_booking_slot → awaiting_time → completed
+- When `bookingCalendarEnabled` is true, after address collection the flow branches to date/slot selection instead of Morning/Afternoon/ASAP
 - Services are **dynamic** - stored in the `settings.services` JSONB column and editable from the Settings screen
 - Services containing "urgent"/"emergency"/"power outage" in the name trigger the urgency flow
 - A service named "Other" (case-insensitive) triggers the free-text description flow
