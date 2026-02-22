@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, Pressable, Platform, Alert, RefreshControl, ActivityIndicator,
+  View, Text, StyleSheet, FlatList, Pressable, Platform, Alert, RefreshControl, ActivityIndicator, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Calendar from 'expo-calendar';
 import Colors from '@/constants/colors';
 import { useData, Job } from '@/lib/data-context';
 import { formatDate, getInitials, getAvatarColor } from '@/lib/helpers';
@@ -15,6 +16,91 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   completed: { label: 'Completed', color: Colors.primaryLight, bg: '#E8EEF8' },
   cancelled: { label: 'Cancelled', color: Colors.textTertiary, bg: Colors.surfaceSecondary },
 };
+
+async function getDefaultCalendarId(): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
+  const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+  const defaultCal = calendars.find(
+    (c) => c.allowsModifications && (c.isPrimary || c.source?.isLocalAccount)
+  );
+  return (defaultCal || calendars.find((c) => c.allowsModifications))?.id || null;
+}
+
+function parseJobDateTime(job: Job): { start: Date; end: Date } {
+  const now = new Date();
+  let startDate = now;
+
+  if (job.date) {
+    const parsed = new Date(job.date);
+    if (!isNaN(parsed.getTime())) startDate = parsed;
+  }
+
+  if (job.time) {
+    const timeLower = job.time.toLowerCase().trim();
+    const match = timeLower.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const minutes = match[2] ? parseInt(match[2], 10) : 0;
+      const ampm = match[3];
+      if (ampm) {
+        if (ampm.toLowerCase() === 'pm' && hours < 12) hours += 12;
+        if (ampm.toLowerCase() === 'am' && hours === 12) hours = 0;
+      }
+      startDate.setHours(hours, minutes, 0, 0);
+    } else if (/morning/i.test(timeLower)) {
+      startDate.setHours(9, 0, 0, 0);
+    } else if (/afternoon/i.test(timeLower)) {
+      startDate.setHours(14, 0, 0, 0);
+    } else if (/evening/i.test(timeLower)) {
+      startDate.setHours(18, 0, 0, 0);
+    }
+  }
+
+  const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+  return { start: startDate, end: endDate };
+}
+
+async function addJobToCalendar(job: Job) {
+  const title = `${job.jobType} - ${job.callerName}`;
+  const { start, end } = parseJobDateTime(job);
+  const notes = [
+    job.callerName ? `Customer: ${job.callerName}` : '',
+    job.phoneNumber ? `Phone: ${job.phoneNumber}` : '',
+    job.isUrgent ? 'URGENT' : '',
+    job.notes || '',
+  ].filter(Boolean).join('\n');
+
+  if (Platform.OS === 'web') {
+    const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmt(start)}/${fmt(end)}&details=${encodeURIComponent(notes)}&location=${encodeURIComponent(job.address || '')}`;
+    Linking.openURL(url);
+    return;
+  }
+
+  const { status } = await Calendar.requestCalendarPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Permission Needed', 'Calendar access is needed to add job events. Please enable it in your phone settings.');
+    return;
+  }
+
+  const calendarId = await getDefaultCalendarId();
+  if (!calendarId) {
+    Alert.alert('No Calendar', 'Could not find a writable calendar on your device.');
+    return;
+  }
+
+  await Calendar.createEventAsync(calendarId, {
+    title,
+    startDate: start,
+    endDate: end,
+    location: job.address || undefined,
+    notes,
+    alarms: [{ relativeOffset: -30 }],
+  });
+
+  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  Alert.alert('Added to Calendar', `"${title}" has been added to your calendar.`);
+}
 
 function JobItem({ item, onStatusChange, onDelete }: {
   item: Job;
@@ -76,14 +162,24 @@ function JobItem({ item, onStatusChange, onDelete }: {
       </View>
 
       <View style={styles.jobActions}>
-        <Pressable
-          style={styles.jobActionBtn}
-          onPress={() => onStatusChange(item)}
-          hitSlop={8}
-        >
-          <Ionicons name="swap-horizontal-outline" size={16} color={Colors.primaryLight} />
-          <Text style={styles.jobActionText}>Status</Text>
-        </Pressable>
+        <View style={styles.jobActionsLeft}>
+          <Pressable
+            style={styles.jobActionBtn}
+            onPress={() => onStatusChange(item)}
+            hitSlop={8}
+          >
+            <Ionicons name="swap-horizontal-outline" size={16} color={Colors.primaryLight} />
+            <Text style={styles.jobActionText}>Status</Text>
+          </Pressable>
+          <Pressable
+            style={styles.calendarBtn}
+            onPress={() => addJobToCalendar(item)}
+            hitSlop={8}
+          >
+            <Ionicons name="calendar-outline" size={16} color={Colors.accent} />
+            <Text style={styles.calendarBtnText}>Calendar</Text>
+          </Pressable>
+        </View>
         <Pressable
           style={styles.deleteBtn}
           onPress={() => onDelete(item.id)}
@@ -366,6 +462,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
   },
+  jobActionsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   jobActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -379,6 +480,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_500Medium',
     color: Colors.primaryLight,
+  },
+  calendarBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#FFF3E0',
+  },
+  calendarBtnText: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.accent,
   },
   deleteBtn: {
     padding: 8,
