@@ -44,11 +44,8 @@ export default function PaywallScreen() {
   const handleSubscribe = useCallback(async () => {
     if (!monthlyPackage) {
       Alert.alert(
-        'Subscription',
-        'Subscriptions will be available once the app is published to the App Store. For now, you can explore the app freely.',
-        [
-          { text: 'Continue to App', onPress: () => router.replace('/onboarding') },
-        ]
+        'Subscription Required',
+        'Subscriptions are managed through the App Store. Please ensure you have the latest version of the app installed.',
       );
       return;
     }
@@ -87,10 +84,6 @@ export default function PaywallScreen() {
       setRestoring(false);
     }
   }, [restorePurchases]);
-
-  const handleSkipForNow = useCallback(() => {
-    router.replace('/onboarding');
-  }, []);
 
   return (
     <View style={[styles.container, { paddingTop: (Platform.OS === 'web' ? webTopInset : insets.top) + 16 }]}>
@@ -145,17 +138,11 @@ export default function PaywallScreen() {
           )}
         </Pressable>
 
-        <View style={styles.linksRow}>
-          <Pressable onPress={handleRestore} disabled={restoring}>
-            <Text style={styles.linkText}>
-              {restoring ? 'Restoring...' : 'Restore Purchase'}
-            </Text>
-          </Pressable>
-          <Text style={styles.linkDot}>|</Text>
-          <Pressable onPress={handleSkipForNow}>
-            <Text style={styles.linkText}>Skip for now</Text>
-          </Pressable>
-        </View>
+        <Pressable onPress={handleRestore} disabled={restoring}>
+          <Text style={styles.linkText}>
+            {restoring ? 'Restoring...' : 'Restore Purchase'}
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -297,19 +284,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
     color: Colors.white,
   },
-  linksRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-  },
   linkText: {
     fontSize: 14,
     fontFamily: 'Inter_500Medium',
     color: Colors.textSecondary,
-  },
-  linkDot: {
-    fontSize: 14,
-    color: Colors.textTertiary,
+    textAlign: 'center',
   },
 });

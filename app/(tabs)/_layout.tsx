@@ -6,6 +6,7 @@ import { Platform, StyleSheet, useColorScheme, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import { useData } from "@/lib/data-context";
+import { useSubscription } from "@/lib/subscription-context";
 import Colors from "@/constants/colors";
 
 function NativeTabLayout() {
@@ -104,16 +105,20 @@ function ClassicTabLayout() {
 
 export default function TabLayout() {
   const { settings, isLoading } = useData();
+  const { isPro, isLoading: subLoading } = useSubscription();
   const hasRedirected = useRef(false);
 
   useEffect(() => {
-    if (isLoading || hasRedirected.current) return;
+    if (isLoading || subLoading || hasRedirected.current) return;
 
-    if (!settings.onboardingComplete) {
+    if (!isPro) {
       hasRedirected.current = true;
       router.replace('/paywall');
+    } else if (!settings.onboardingComplete) {
+      hasRedirected.current = true;
+      router.replace('/onboarding');
     }
-  }, [isLoading, settings.onboardingComplete]);
+  }, [isLoading, subLoading, isPro, settings.onboardingComplete]);
 
   if (isLiquidGlassAvailable()) {
     return <NativeTabLayout />;

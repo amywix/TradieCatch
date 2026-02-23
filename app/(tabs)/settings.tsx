@@ -239,9 +239,9 @@ export default function SettingsScreen() {
                   />
                 </View>
                 <View style={styles.settingContent}>
-                  <Text style={styles.settingLabel}>{isPro ? 'TradieCatch Pro' : 'Free Plan'}</Text>
+                  <Text style={styles.settingLabel}>{isPro ? 'TradieCatch Pro' : 'No Active Subscription'}</Text>
                   <Text style={styles.settingDescription}>
-                    {isPro ? 'Your subscription is active' : 'Upgrade to unlock all features'}
+                    {isPro ? 'Your subscription is active' : 'Subscribe to continue using TradieCatch'}
                   </Text>
                 </View>
               </View>
