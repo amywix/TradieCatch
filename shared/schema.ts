@@ -9,12 +9,15 @@ export const users = pgTable("users", {
     .default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  email: text("email").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const missedCalls = pgTable("missed_calls", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
   callerName: text("caller_name").notNull().default("Unknown Caller"),
   phoneNumber: text("phone_number").notNull(),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
@@ -34,6 +37,7 @@ export const jobs = pgTable("jobs", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
   callerName: text("caller_name").notNull(),
   phoneNumber: text("phone_number").notNull(),
   jobType: text("job_type").notNull(),
@@ -51,6 +55,7 @@ export const smsTemplates = pgTable("sms_templates", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
   name: text("name").notNull(),
   message: text("message").notNull(),
   isDefault: boolean("is_default").default(false).notNull(),
@@ -67,7 +72,8 @@ export const DEFAULT_SERVICES = [
 ];
 
 export const settings = pgTable("settings", {
-  id: varchar("id").primaryKey().default("default"),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
   businessName: text("business_name").default("").notNull(),
   autoReplyEnabled: boolean("auto_reply_enabled").default(true).notNull(),
   onboardingComplete: boolean("onboarding_complete").default(false).notNull(),
@@ -85,6 +91,7 @@ export const settings = pgTable("settings", {
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  email: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
