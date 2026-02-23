@@ -1,17 +1,20 @@
 import twilio from "twilio";
 import { db } from "./db";
 import { missedCalls, jobs, settings, DEFAULT_SERVICES } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
-async function getServices(): Promise<string[]> {
-  const rows = await db.select().from(settings).where(eq(settings.id, "default"));
-  const s = rows[0];
+async function getSettingsForUser(userId: string) {
+  const rows = await db.select().from(settings).where(eq(settings.userId, userId));
+  return rows[0];
+}
+
+async function getServices(userId: string): Promise<string[]> {
+  const s = await getSettingsForUser(userId);
   return (s?.services as string[]) || DEFAULT_SERVICES;
 }
 
-async function getBookingConfig(): Promise<{ enabled: boolean; slots: string[] }> {
-  const rows = await db.select().from(settings).where(eq(settings.id, "default"));
-  const s = rows[0];
+async function getBookingConfig(userId: string): Promise<{ enabled: boolean; slots: string[] }> {
+  const s = await getSettingsForUser(userId);
   return {
     enabled: s?.bookingCalendarEnabled ?? false,
     slots: (s?.bookingSlots as string[]) || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
@@ -52,9 +55,8 @@ function buildServicesMenuText(servicesList: string[]): string {
   }).join("\n");
 }
 
-async function getTwilioConfig() {
-  const rows = await db.select().from(settings).where(eq(settings.id, "default"));
-  const s = rows[0];
+async function getTwilioConfig(userId: string) {
+  const s = await getSettingsForUser(userId);
   const sid = s?.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "";
   const token = s?.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "";
   const phone = s?.twilioPhoneNumber || process.env.TWILIO_PHONE_NUMBER || "";
@@ -66,8 +68,8 @@ function addLogEntry(log: Array<{role: string; message: string; timestamp: strin
   return log;
 }
 
-export async function sendSms(to: string, body: string): Promise<void> {
-  const { sid, token, phone } = await getTwilioConfig();
+export async function sendSms(to: string, body: string, userId: string): Promise<void> {
+  const { sid, token, phone } = await getTwilioConfig(userId);
   if (!sid || !token || !phone) {
     throw new Error("Twilio credentials not configured. Please set them up in Settings.");
   }
@@ -85,18 +87,18 @@ export async function sendSms(to: string, body: string): Promise<void> {
   }
 }
 
-export async function sendInitialMissedCallSms(callId: string): Promise<void> {
+export async function sendInitialMissedCallSms(callId: string, userId: string): Promise<void> {
   const rows = await db.select().from(missedCalls).where(eq(missedCalls.id, callId));
   const call = rows[0];
   if (!call) throw new Error("Call not found");
 
-  const { businessName } = await getTwilioConfig();
-  const servicesList = await getServices();
+  const { businessName } = await getTwilioConfig(userId);
+  const servicesList = await getServices(userId);
   const menuText = buildServicesMenuText(servicesList);
 
   const message = `Hi! Sorry we missed your call!\nThis is ${businessName}\nWhat can we help you with today?\n\nReply with the number below:\n\n${menuText}`;
 
-  await sendSms(call.phoneNumber, message);
+  await sendSms(call.phoneNumber, message, userId);
 
   let log = (call.conversationLog || []) as Array<{role: string; message: string; timestamp: string}>;
   addLogEntry(log, "business", message);
@@ -109,16 +111,43 @@ export async function sendInitialMissedCallSms(callId: string): Promise<void> {
   }).where(eq(missedCalls.id, callId));
 }
 
-export async function handleIncomingReply(fromPhone: string, body: string): Promise<string | null> {
+async function findUserByTwilioNumber(toPhone: string): Promise<string | null> {
+  const allSettings = await db.select().from(settings);
+  for (const s of allSettings) {
+    const twilioNum = s.twilioPhoneNumber || "";
+    if (twilioNum && phonesMatch(twilioNum, toPhone)) {
+      return s.userId;
+    }
+  }
+  return null;
+}
+
+export async function handleIncomingReply(fromPhone: string, body: string, toPhone: string): Promise<string | null> {
   const normalizedPhone = normalizePhone(fromPhone);
 
-  let rows = await db.select().from(missedCalls)
-    .where(eq(missedCalls.phoneNumber, normalizedPhone));
+  let userId: string | null = null;
 
-  if (rows.length === 0) {
-    const allCalls = await db.select().from(missedCalls);
-    rows = allCalls.filter(c => phonesMatch(c.phoneNumber, normalizedPhone));
-    console.log(`Phone lookup: exact match failed for "${normalizedPhone}", fuzzy matched ${rows.length} calls`);
+  if (toPhone) {
+    userId = await findUserByTwilioNumber(toPhone);
+  }
+
+  let rows;
+  if (userId) {
+    rows = await db.select().from(missedCalls)
+      .where(and(eq(missedCalls.userId, userId), eq(missedCalls.phoneNumber, normalizedPhone)));
+
+    if (rows.length === 0) {
+      const allCalls = await db.select().from(missedCalls).where(eq(missedCalls.userId, userId));
+      rows = allCalls.filter(c => phonesMatch(c.phoneNumber, normalizedPhone));
+    }
+  } else {
+    rows = await db.select().from(missedCalls)
+      .where(eq(missedCalls.phoneNumber, normalizedPhone));
+
+    if (rows.length === 0) {
+      const allCalls = await db.select().from(missedCalls);
+      rows = allCalls.filter(c => phonesMatch(c.phoneNumber, normalizedPhone));
+    }
   }
 
   let call = rows.find(c => c.conversationState !== "none" && c.conversationState !== "completed");
@@ -135,6 +164,8 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
     return null;
   }
 
+  const callUserId = call.userId;
+
   const reply = body.trim();
   let log = (call.conversationLog || []) as Array<{role: string; message: string; timestamp: string}>;
   addLogEntry(log, "customer", reply);
@@ -144,7 +175,7 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
   let newState = state;
   let updates: Record<string, any> = {};
 
-  const servicesList = await getServices();
+  const servicesList = await getServices(callUserId);
   const SERVICES = buildServicesMap(servicesList);
   const maxChoice = servicesList.length;
   const choiceRegex = new RegExp(`[^1-${maxChoice}]`, "g");
@@ -215,7 +246,7 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
 
     case "awaiting_address": {
       updates.jobAddress = reply;
-      const booking = await getBookingConfig();
+      const booking = await getBookingConfig(callUserId);
       if (booking.enabled) {
         const dates = getNextAvailableDates(5);
         const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
@@ -234,7 +265,7 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
       const idx = parseInt(dateChoice, 10) - 1;
       if (idx >= 0 && idx < dates.length) {
         updates.selectedTime = dates[idx].label;
-        const booking = await getBookingConfig();
+        const booking = await getBookingConfig(callUserId);
         const slotMenu = booking.slots.map((s, i) => `${i + 1}. ${s}`).join("\n");
         response = `Great, ${dates[idx].label}!\n\nWhat time suits you?\n\n${slotMenu}`;
         newState = "awaiting_booking_slot";
@@ -247,7 +278,7 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
     }
 
     case "awaiting_booking_slot": {
-      const booking = await getBookingConfig();
+      const booking = await getBookingConfig(callUserId);
       const slotIdx = parseInt(reply.replace(/[^0-9]/g, ""), 10) - 1;
       if (slotIdx >= 0 && slotIdx < booking.slots.length) {
         const timeSlot = booking.slots[slotIdx];
@@ -258,11 +289,12 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
 
         updates.selectedTime = `${dateLabel} ${timeSlot}`;
 
-        const { businessName } = await getTwilioConfig();
+        const { businessName } = await getTwilioConfig(callUserId);
         response = `Booked! ${dateLabel} at ${timeSlot}.\n\nWe've confirmed your appointment.${call.isUrgent || updates.isUrgent ? "\n\nMarked as urgent - we'll prioritise this." : ""}\n\n- ${businessName}`;
         newState = "completed";
 
         await db.insert(jobs).values({
+          userId: callUserId,
           callerName: call.callerName,
           phoneNumber: call.phoneNumber,
           jobType: call.selectedService || updates.selectedService || "General",
@@ -296,7 +328,7 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
 
       updates.selectedTime = timeLabel;
 
-      const { businessName } = await getTwilioConfig();
+      const { businessName } = await getTwilioConfig(callUserId);
       response = `Thanks! We've received your request.\n\nOur team will confirm your booking shortly.${call.isUrgent || updates.isUrgent ? "\n\nIf urgent, we'll call you ASAP." : ""}\n\n- ${businessName}`;
       newState = "completed";
 
@@ -304,6 +336,7 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
       const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
       await db.insert(jobs).values({
+        userId: callUserId,
         callerName: call.callerName,
         phoneNumber: call.phoneNumber,
         jobType: call.selectedService || updates.selectedService || "General",
@@ -321,7 +354,7 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
     }
 
     case "completed": {
-      const { businessName } = await getTwilioConfig();
+      const { businessName } = await getTwilioConfig(callUserId);
       response = `Thanks for your message! Your booking is already logged. Our team will be in touch shortly.\n\n- ${businessName}`;
       newState = "completed";
       break;
@@ -334,7 +367,7 @@ export async function handleIncomingReply(fromPhone: string, body: string): Prom
 
   if (response) {
     addLogEntry(log, "business", response);
-    await sendSms(call.phoneNumber, response);
+    await sendSms(call.phoneNumber, response, callUserId);
   }
 
   await db.update(missedCalls).set({
