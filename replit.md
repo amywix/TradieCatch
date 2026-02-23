@@ -2,13 +2,14 @@
 
 ## Overview
 
-TradieCatch is a mobile-first application built for tradespeople (electricians specifically) to manage missed calls, automate SMS follow-ups, and book jobs. The app uses Expo/React Native for the frontend with a tab-based navigation system, and an Express.js backend with PostgreSQL for data persistence. It integrates with Twilio for automated SMS conversations that guide callers through service selection and job booking.
+TradieCatch is a multi-tenant SaaS mobile application built for tradespeople (electricians) to manage missed calls, automate SMS follow-ups, and book jobs. The app uses Expo/React Native for the frontend with a tab-based navigation system, and an Express.js backend with PostgreSQL for data persistence. It integrates with Twilio for automated SMS conversations that guide callers through service selection and job booking. Each tradie signs up for their own account with isolated data and configures their own Twilio credentials.
 
 The core workflow is:
-1. A missed call comes in and is logged
-2. An automated SMS conversation is initiated via Twilio, guiding the caller through service selection, urgency assessment, address collection, and time preferences
-3. Jobs are created from completed conversations
-4. The tradie can manage jobs through status workflows (pending → confirmed → completed/cancelled)
+1. Tradie signs up/logs in to their account
+2. A missed call comes in and is logged to the correct tradie's account (identified by their Twilio phone number)
+3. An automated SMS conversation is initiated via the tradie's Twilio credentials, guiding the caller through service selection, urgency assessment, address collection, and time preferences
+4. Jobs are created from completed conversations
+5. The tradie can manage jobs through status workflows (pending → confirmed → completed/cancelled)
 
 ## User Preferences
 
@@ -16,10 +17,21 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
+### Authentication & Multi-Tenancy
+- **Auth**: JWT-based authentication with bcrypt password hashing (`server/auth.ts`)
+- **Auth Context**: `lib/auth-context.tsx` provides `useAuth()` hook with login, register, logout, user state
+- **Token Storage**: JWT stored in AsyncStorage, included in all API requests via `Authorization: Bearer` header
+- **Data Isolation**: All data tables have a `userId` column; all API queries filter by authenticated user
+- **Login Screen**: `app/login.tsx` with email/password login and registration
+- **Auth Flow**: Unauthenticated users are redirected to `/login` via `AuthGate` in `_layout.tsx`
+- **API Endpoints**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`
+- **Twilio Per-User**: Each user stores their own Twilio credentials in settings; webhooks identify users by their Twilio phone number
+
 ### Frontend (Expo/React Native)
 - **Framework**: Expo SDK 54 with React Native 0.81, using expo-router v6 for file-based routing
 - **Navigation**: Tab-based layout with three tabs (Calls, Jobs, Settings) plus modal screens for booking jobs, sending SMS, adding calls, and editing templates
-- **State Management**: React Context (`DataProvider` in `lib/data-context.tsx`) wraps the app and provides all data operations. TanStack React Query is available for query caching via `lib/query-client.ts`
+- **State Management**: React Context (`DataProvider` in `lib/data-context.tsx`) wraps the app and provides all data operations. DataProvider only fetches data when user is authenticated. TanStack React Query is available for query caching via `lib/query-client.ts`
+- **Auth Headers**: `lib/query-client.ts` automatically includes JWT token in all API requests via `getAuthHeaders()`
 - **Fonts**: Inter font family (400, 500, 600, 700 weights) via `@expo-google-fonts/inter`
 - **Styling**: StyleSheet-based with a centralized color palette in `constants/colors.ts`. The app uses a professional dark blue + orange accent color scheme
 - **Platform Support**: Primarily targets iOS and Android with web compatibility. Platform-specific adjustments exist throughout (safe area insets, keyboard handling, SMS URL schemes)
@@ -28,30 +40,34 @@ Preferred communication style: Simple, everyday language.
 ### Backend (Express.js)
 - **Server**: Express v5 running as a Node.js server (`server/index.ts`)
 - **API Pattern**: RESTful JSON API under `/api/` prefix with routes defined in `server/routes.ts`
+- **Auth Middleware**: `requireAuth` middleware validates JWT and sets `req.userId` for all protected routes
 - **Build**: Uses esbuild for production server bundling, tsx for development
-- **CORS**: Dynamic CORS configuration supporting Replit domains and localhost development
-- **Key Endpoints**:
-  - `GET/POST/DELETE /api/missed-calls` - CRUD for missed calls
+- **CORS**: Dynamic CORS configuration supporting Replit domains and localhost development, allows Authorization header
+- **Key Endpoints** (all except auth and config require authentication):
+  - `POST /api/auth/register` - User registration (public)
+  - `POST /api/auth/login` - User login (public)
+  - `GET /api/auth/me` - Get current user (authenticated)
+  - `GET /api/config` - App config including webhook URLs (public)
+  - `GET/POST/DELETE /api/missed-calls` - CRUD for missed calls (scoped to user)
   - `POST /api/missed-calls/:id/send-sms` - Trigger automated SMS conversation
-  - `GET/POST/DELETE /api/jobs` - CRUD for jobs
-  - `PUT /api/jobs/:id/status` - Update job status
-  - `GET/POST/PUT/DELETE /api/sms-templates` - Manage SMS templates
-  - `GET/PUT /api/settings` - App settings
-  - `GET/PUT /api/services` - Manage services list
-  - `POST /api/twilio/webhook` - Twilio SMS webhook for incoming text replies
-  - `POST /api/twilio/voice` - Twilio voice webhook for incoming calls (auto-logs as missed call, triggers auto-SMS, returns TwiML with voicemail message)
+  - `GET/POST/PATCH/DELETE /api/jobs` - CRUD for jobs (scoped to user)
+  - `GET/POST/PATCH/DELETE /api/templates` - Manage SMS templates (scoped to user)
+  - `GET/PATCH /api/settings` - App settings (scoped to user)
+  - `GET/PUT /api/services` - Manage services list (scoped to user)
+  - `POST /api/twilio/webhook` - Twilio SMS webhook (identifies user by phone number)
+  - `POST /api/twilio/voice` - Twilio voice webhook (identifies user by phone number)
 
 ### Database (PostgreSQL + Drizzle ORM)
 - **ORM**: Drizzle ORM with PostgreSQL dialect
 - **Schema** (`shared/schema.ts`):
-  - `users` - Basic user table (id, username, password)
-  - `missed_calls` - Core table tracking calls with conversation state machine fields (conversationState, selectedService, selectedSubOption, selectedTime, jobAddress, isUrgent, conversationLog as JSONB)
-  - `jobs` - Booked jobs with type, date, time, address, status, urgency
-  - `sms_templates` - Customizable SMS templates
-  - `settings` - Business configuration (name, auto-reply toggle, bookingCalendarEnabled, bookingSlots JSONB array)
+  - `users` - User accounts (id, username, email, password, createdAt)
+  - `missed_calls` - Core table with `userId` FK, conversation state machine fields
+  - `jobs` - Booked jobs with `userId` FK, type, date, time, address, status, urgency
+  - `sms_templates` - Customizable SMS templates with `userId` FK
+  - `settings` - Per-user business configuration with unique `userId` constraint (name, Twilio creds, auto-reply toggle, services, bookingCalendarEnabled, bookingSlots)
 - **Migrations**: Managed via `drizzle-kit push` command
 - **Validation**: Uses `drizzle-zod` for schema-to-Zod validation
-- **Seeding**: Default templates and settings are seeded on server startup via `seedDefaults()` in routes
+- **Seeding**: Default templates and settings are created per-user during registration
 
 ### SMS Conversation Engine (`server/sms-conversation.ts`)
 - Implements a state machine for automated SMS conversations with callers
@@ -93,8 +109,9 @@ Preferred communication style: Simple, everyday language.
 
 ### Twilio (SMS)
 - Used for sending and receiving SMS messages in automated conversations
-- Required environment variables: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`
-- Webhook endpoint needed for incoming SMS replies
+- Per-user Twilio credentials stored in settings table (twilioAccountSid, twilioAuthToken, twilioPhoneNumber)
+- Fallback environment variables: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` (used if user hasn't configured their own)
+- Webhook endpoint identifies the correct user by matching the incoming Twilio phone number
 
 ### PostgreSQL
 - Primary data store, connected via `DATABASE_URL` environment variable
