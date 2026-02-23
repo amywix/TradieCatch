@@ -111,7 +111,7 @@ export default function TabLayout() {
   useEffect(() => {
     if (isLoading || subLoading || hasRedirected.current) return;
 
-    if (!isPro) {
+    if (!isPro && !settings.onboardingComplete) {
       hasRedirected.current = true;
       router.replace('/paywall');
     } else if (!settings.onboardingComplete) {
@@ -128,7 +128,7 @@ export default function TabLayout() {
     );
   }
 
-  if (!isPro) {
+  if (!isPro && !settings.onboardingComplete) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background }} />
     );

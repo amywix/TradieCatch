@@ -138,11 +138,17 @@ export default function PaywallScreen() {
           )}
         </Pressable>
 
-        <Pressable onPress={handleRestore} disabled={restoring}>
-          <Text style={styles.linkText}>
-            {restoring ? 'Restoring...' : 'Restore Purchase'}
-          </Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+          <Pressable onPress={handleRestore} disabled={restoring}>
+            <Text style={styles.linkText}>
+              {restoring ? 'Restoring...' : 'Restore Purchase'}
+            </Text>
+          </Pressable>
+          <Text style={styles.linkText}>|</Text>
+          <Pressable onPress={() => router.replace('/onboarding')}>
+            <Text style={styles.linkText}>Skip for now</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
