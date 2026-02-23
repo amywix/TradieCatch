@@ -121,7 +121,7 @@ export default function PaywallScreen() {
             <Text style={styles.priceBadgeText}>MOST POPULAR</Text>
           </View>
           <View style={styles.priceRow}>
-            <Text style={styles.priceAmount}>$99</Text>
+            <Text style={styles.priceAmount}>$149</Text>
             <Text style={styles.pricePeriod}>/month</Text>
           </View>
           <Text style={styles.priceDesc}>Cancel anytime. No lock-in contracts.</Text>
@@ -139,7 +139,7 @@ export default function PaywallScreen() {
           ) : (
             <>
               <Text style={styles.subscribeBtnText}>
-                {monthlyPackage ? 'Subscribe - $99/month' : 'Start Free Trial'}
+                {monthlyPackage ? 'Subscribe - $149/month' : 'Start Free Trial'}
               </Text>
             </>
           )}
