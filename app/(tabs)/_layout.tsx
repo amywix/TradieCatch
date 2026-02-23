@@ -2,7 +2,7 @@ import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs, router } from "expo-router";
 import { NativeTabs, Icon, Label, Badge } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
-import { Platform, StyleSheet, useColorScheme, View } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, useColorScheme, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import { useData } from "@/lib/data-context";
@@ -119,6 +119,20 @@ export default function TabLayout() {
       router.replace('/onboarding');
     }
   }, [isLoading, subLoading, isPro, settings.onboardingComplete]);
+
+  if (isLoading || subLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background }}>
+        <ActivityIndicator size="large" color={Colors.accent} />
+      </View>
+    );
+  }
+
+  if (!isPro) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background }} />
+    );
+  }
 
   if (isLiquidGlassAvailable()) {
     return <NativeTabLayout />;
