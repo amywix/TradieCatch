@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -10,13 +10,35 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { DataProvider } from "@/lib/data-context";
 import { SubscriptionProvider } from "@/lib/subscription-context";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/query-client";
 
 SplashScreen.preventAutoHideAsync();
 
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const onLoginScreen = segments[0] === 'login';
+
+    if (!isAuthenticated && !onLoginScreen) {
+      router.replace('/login');
+    } else if (isAuthenticated && onLoginScreen) {
+      router.replace('/(tabs)');
+    }
+  }, [isAuthenticated, isLoading, segments]);
+
+  return <>{children}</>;
+}
+
 function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
+      <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="paywall" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
@@ -65,11 +87,15 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView>
           <KeyboardProvider>
-            <DataProvider>
-              <SubscriptionProvider>
-                <RootLayoutNav />
-              </SubscriptionProvider>
-            </DataProvider>
+            <AuthProvider>
+              <AuthGate>
+                <DataProvider>
+                  <SubscriptionProvider>
+                    <RootLayoutNav />
+                  </SubscriptionProvider>
+                </DataProvider>
+              </AuthGate>
+            </AuthProvider>
           </KeyboardProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>

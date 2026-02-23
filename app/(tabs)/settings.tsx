@@ -10,6 +10,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useData } from '@/lib/data-context';
 import { useSubscription } from '@/lib/subscription-context';
+import { useAuth } from '@/lib/auth-context';
 import { apiRequest } from '@/lib/query-client';
 import { router } from 'expo-router';
 
@@ -17,6 +18,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { settings, updateAppSettings, updateServices } = useData();
   const { isPro } = useSubscription();
+  const { user, logout } = useAuth();
   const [businessName, setBusinessName] = useState(settings.businessName);
   const [editingName, setEditingName] = useState(false);
   const [editingServiceIdx, setEditingServiceIdx] = useState<number | null>(null);
@@ -749,6 +751,43 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account</Text>
+          <View style={styles.card}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIcon, { backgroundColor: '#E8F0FE' }]}>
+                  <Ionicons name="person-outline" size={18} color={Colors.primary} />
+                </View>
+                <View style={styles.settingContent}>
+                  <Text style={styles.settingLabel}>{user?.username || 'User'}</Text>
+                  <Text style={styles.settingDescription}>{user?.email || ''}</Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.aboutDivider} />
+            <Pressable
+              style={styles.logoutRow}
+              onPress={() => {
+                Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Sign Out',
+                    style: 'destructive',
+                    onPress: async () => {
+                      await logout();
+                    },
+                  },
+                ]);
+              }}
+              testID="logout-btn"
+            >
+              <Ionicons name="log-out-outline" size={20} color={Colors.danger} />
+              <Text style={styles.logoutText}>Sign Out</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.card}>
             <View style={styles.aboutRow}>
@@ -1147,5 +1186,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: Colors.textSecondary,
     lineHeight: 20,
+  },
+  logoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  logoutText: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.danger,
   },
 });
