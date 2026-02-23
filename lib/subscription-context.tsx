@@ -1,37 +1,50 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { Platform, AppState, AppStateStatus } from 'react-native';
-import Purchases, { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
+import { AppState, AppStateStatus, Linking, Platform } from 'react-native';
+import { apiRequest } from './query-client';
+import { useAuth } from './auth-context';
+
+interface SubscriptionInfo {
+  id: string;
+  status: string;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+}
 
 interface SubscriptionContextValue {
   isPro: boolean;
   isLoading: boolean;
-  customerInfo: CustomerInfo | null;
+  subscription: SubscriptionInfo | null;
   checkSubscription: () => Promise<boolean>;
-  purchasePackage: (pkg: PurchasesPackage) => Promise<boolean>;
-  restorePurchases: () => Promise<boolean>;
+  openCheckout: () => Promise<void>;
+  openCustomerPortal: () => Promise<void>;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextValue | null>(null);
 
-const ENTITLEMENT_ID = 'pro';
-
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth();
   const [isPro, setIsPro] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
 
   const checkSubscription = useCallback(async (): Promise<boolean> => {
-    try {
-      const info = await Purchases.getCustomerInfo();
-      setCustomerInfo(info);
-      const active = !!info.entitlements.active[ENTITLEMENT_ID];
-      setIsPro(active);
-      return active;
-    } catch (err) {
-      console.log('Subscription check error (expected in dev):', err);
+    if (!isAuthenticated) {
+      setIsPro(false);
+      setSubscription(null);
       return false;
     }
-  }, []);
+
+    try {
+      const res = await apiRequest('GET', '/api/stripe/subscription-status');
+      const data = await res.json();
+      setIsPro(data.active);
+      setSubscription(data.subscription);
+      return data.active;
+    } catch (err) {
+      console.log('Subscription check error:', err);
+      return false;
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     let mounted = true;
@@ -45,20 +58,21 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    init();
-
-    Purchases.addCustomerInfoUpdateListener((info) => {
-      if (!mounted) return;
-      setCustomerInfo(info);
-      setIsPro(!!info.entitlements.active[ENTITLEMENT_ID]);
-    });
+    if (isAuthenticated) {
+      init();
+    } else {
+      setIsPro(false);
+      setSubscription(null);
+      setIsLoading(false);
+    }
 
     return () => {
       mounted = false;
     };
-  }, [checkSubscription]);
+  }, [isAuthenticated, checkSubscription]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     const handleAppState = (nextState: AppStateStatus) => {
       if (nextState === 'active') {
         checkSubscription();
@@ -66,29 +80,38 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     };
     const sub = AppState.addEventListener('change', handleAppState);
     return () => sub.remove();
-  }, [checkSubscription]);
+  }, [isAuthenticated, checkSubscription]);
 
-  const purchasePackageHandler = useCallback(async (pkg: PurchasesPackage): Promise<boolean> => {
+  const openCheckout = useCallback(async () => {
     try {
-      const { customerInfo: info } = await Purchases.purchasePackage(pkg);
-      setCustomerInfo(info);
-      const active = !!info.entitlements.active[ENTITLEMENT_ID];
-      setIsPro(active);
-      return active;
-    } catch (err: any) {
-      if (err.userCancelled) return false;
+      const res = await apiRequest('POST', '/api/stripe/create-checkout');
+      const data = await res.json();
+      if (data.url) {
+        if (Platform.OS === 'web') {
+          window.location.href = data.url;
+        } else {
+          await Linking.openURL(data.url);
+        }
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
       throw err;
     }
   }, []);
 
-  const restorePurchasesHandler = useCallback(async (): Promise<boolean> => {
+  const openCustomerPortal = useCallback(async () => {
     try {
-      const info = await Purchases.restorePurchases();
-      setCustomerInfo(info);
-      const active = !!info.entitlements.active[ENTITLEMENT_ID];
-      setIsPro(active);
-      return active;
+      const res = await apiRequest('POST', '/api/stripe/customer-portal');
+      const data = await res.json();
+      if (data.url) {
+        if (Platform.OS === 'web') {
+          window.location.href = data.url;
+        } else {
+          await Linking.openURL(data.url);
+        }
+      }
     } catch (err) {
+      console.error('Customer portal error:', err);
       throw err;
     }
   }, []);
@@ -97,10 +120,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     <SubscriptionContext.Provider value={{
       isPro,
       isLoading,
-      customerInfo,
+      subscription,
       checkSubscription,
-      purchasePackage: purchasePackageHandler,
-      restorePurchases: restorePurchasesHandler,
+      openCheckout,
+      openCustomerPortal,
     }}>
       {children}
     </SubscriptionContext.Provider>

@@ -1,89 +1,44 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, Platform, ActivityIndicator, Alert, Linking,
+  View, Text, StyleSheet, Pressable, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
-import Purchases, { PurchasesPackage } from 'react-native-purchases';
 import Colors from '@/constants/colors';
 import { useSubscription } from '@/lib/subscription-context';
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
-  const { purchasePackage, restorePurchases } = useSubscription();
-  const [loading, setLoading] = useState(true);
+  const { openCheckout, checkSubscription } = useSubscription();
   const [purchasing, setPurchasing] = useState(false);
-  const [restoring, setRestoring] = useState(false);
-  const [monthlyPackage, setMonthlyPackage] = useState<PurchasesPackage | null>(null);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
 
-  useEffect(() => {
-    loadOfferings();
-  }, []);
-
-  const loadOfferings = async () => {
-    try {
-      const offerings = await Purchases.getOfferings();
-      if (offerings.current) {
-        const monthly = offerings.current.availablePackages.find(
-          p => p.packageType === 'MONTHLY'
-        ) || offerings.current.availablePackages[0] || null;
-        setMonthlyPackage(monthly);
-      }
-    } catch (err) {
-      console.log('RevenueCat offerings error (expected in dev):', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSubscribe = useCallback(async () => {
-    if (!monthlyPackage) {
-      Alert.alert(
-        'Subscription Required',
-        'Subscriptions are managed through the App Store. Please ensure you have the latest version of the app installed.',
-      );
-      return;
-    }
-
     setPurchasing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const success = await purchasePackage(monthlyPackage);
-      if (success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace('/onboarding');
-      }
+      await openCheckout();
     } catch (err: any) {
-      Alert.alert('Error', 'Purchase failed. Please try again.');
+      Alert.alert('Error', 'Could not open checkout. Please try again.');
     } finally {
       setPurchasing(false);
     }
-  }, [monthlyPackage, purchasePackage]);
+  }, [openCheckout]);
 
-  const handleRestore = useCallback(async () => {
-    setRestoring(true);
-    try {
-      const success = await restorePurchases();
-      if (success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Restored!', 'Your subscription has been restored.', [
-          { text: 'Continue', onPress: () => router.replace('/onboarding') },
-        ]);
-      } else {
-        Alert.alert('No subscription found', 'We couldn\'t find an active subscription for this account.');
-      }
-    } catch {
-      Alert.alert('Error', 'Failed to restore purchases. Please try again.');
-    } finally {
-      setRestoring(false);
+  const handleAlreadySubscribed = useCallback(async () => {
+    const active = await checkSubscription();
+    if (active) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/onboarding');
+    } else {
+      Alert.alert('No subscription found', 'We couldn\'t find an active subscription for this account. Please subscribe first.');
     }
-  }, [restorePurchases]);
+  }, [checkSubscription]);
 
   return (
     <View style={[styles.container, { paddingTop: (Platform.OS === 'web' ? webTopInset : insets.top) + 16 }]}>
@@ -123,26 +78,20 @@ export default function PaywallScreen() {
 
       <View style={[styles.bottomSection, { paddingBottom: (Platform.OS === 'web' ? 34 : insets.bottom) + 16 }]}>
         <Pressable
-          style={[styles.subscribeBtn, (purchasing || loading) && styles.subscribeBtnDisabled]}
+          style={[styles.subscribeBtn, purchasing && styles.subscribeBtnDisabled]}
           onPress={handleSubscribe}
-          disabled={purchasing || loading}
+          disabled={purchasing}
         >
           {purchasing ? (
             <ActivityIndicator size="small" color={Colors.white} />
           ) : (
-            <>
-              <Text style={styles.subscribeBtnText}>
-                {monthlyPackage ? 'Subscribe - $149/month' : 'Start Free Trial'}
-              </Text>
-            </>
+            <Text style={styles.subscribeBtnText}>Subscribe - $149/month</Text>
           )}
         </Pressable>
 
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
-          <Pressable onPress={handleRestore} disabled={restoring}>
-            <Text style={styles.linkText}>
-              {restoring ? 'Restoring...' : 'Restore Purchase'}
-            </Text>
+          <Pressable onPress={handleAlreadySubscribed}>
+            <Text style={styles.linkText}>Already subscribed?</Text>
           </Pressable>
           <Text style={styles.linkText}>|</Text>
           <Pressable onPress={() => router.replace('/onboarding')}>

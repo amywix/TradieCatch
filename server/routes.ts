@@ -1,10 +1,12 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
+import { sql as rawSql } from "drizzle-orm";
 import { missedCalls, jobs, settings, smsTemplates, users, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, desc, and, SQL } from "drizzle-orm";
 import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
 import { register, login, getMe, requireAuth, type AuthRequest } from "./auth";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 function paramId(req: Request | AuthRequest): string {
   const id = req.params.id;
@@ -27,8 +29,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       : hostFromHeader
         ? `${protocol}://${hostFromHeader}`
         : "";
+
+    let stripePublishableKey = "";
+    try {
+      stripePublishableKey = await getStripePublishableKey();
+    } catch (e) {
+      console.log("Stripe publishable key not available:", (e as Error).message);
+    }
+
     res.json({
       revenueCatApiKey: process.env.REVENUECAT_API_KEY || "",
+      stripePublishableKey,
       webhookUrl: appUrl ? `${appUrl}/api/twilio/webhook` : "",
       voiceWebhookUrl: appUrl ? `${appUrl}/api/twilio/voice` : "",
       appUrl,
@@ -297,6 +308,160 @@ export async function registerRoutes(app: Express): Promise<Server> {
       and(eq(smsTemplates.id, id), eq(smsTemplates.userId, req.userId!))
     ).returning();
     res.json(template);
+  });
+
+  app.post("/api/stripe/create-checkout", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const userId = req.userId!;
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      let customerId = user.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.email,
+          metadata: { userId },
+        });
+        await db.update(users).set({ stripeCustomerId: customer.id }).where(eq(users.id, userId));
+        customerId = customer.id;
+      }
+
+      const prices = await db.execute(
+        rawSql`SELECT id FROM stripe.prices WHERE active = true AND recurring IS NOT NULL ORDER BY unit_amount DESC LIMIT 1`
+      );
+
+      if (!prices.rows.length) {
+        return res.status(400).json({ error: "No subscription price configured yet" });
+      }
+
+      const priceId = prices.rows[0].id as string;
+
+      const domains = process.env.REPLIT_DOMAINS || "";
+      const primaryDomain = domains.split(",")[0]?.trim() || "";
+      const baseUrl = primaryDomain ? `https://${primaryDomain}` : `${req.protocol}://${req.get("host")}`;
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: 'subscription',
+        success_url: `${baseUrl}/api/stripe/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/api/stripe/checkout-cancel`,
+      });
+
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("Stripe checkout error:", err);
+      res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  app.get("/api/stripe/checkout-success", async (req: Request, res: Response) => {
+    const sessionId = req.query.session_id as string;
+    if (!sessionId) return res.redirect("/?checkout=error");
+
+    try {
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.customer && session.subscription) {
+        const customerId = typeof session.customer === 'string' ? session.customer : session.customer.id;
+        const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription.id;
+
+        await db.update(users)
+          .set({ stripeSubscriptionId: subscriptionId })
+          .where(eq(users.stripeCustomerId, customerId));
+      }
+    } catch (err) {
+      console.error("Error processing checkout success:", err);
+    }
+
+    const domains = process.env.REPLIT_DOMAINS || "";
+    const devDomain = process.env.REPLIT_DEV_DOMAIN || "";
+    const primaryDomain = domains.split(",")[0]?.trim() || devDomain;
+    const appPort = "8081";
+
+    const redirectUrl = devDomain
+      ? `https://${devDomain}:${appPort}/?checkout=success`
+      : `https://${primaryDomain}/?checkout=success`;
+
+    res.redirect(redirectUrl);
+  });
+
+  app.get("/api/stripe/checkout-cancel", async (req: Request, res: Response) => {
+    const devDomain = process.env.REPLIT_DEV_DOMAIN || "";
+    const domains = process.env.REPLIT_DOMAINS || "";
+    const primaryDomain = domains.split(",")[0]?.trim() || devDomain;
+    const appPort = "8081";
+
+    const redirectUrl = devDomain
+      ? `https://${devDomain}:${appPort}/?checkout=cancelled`
+      : `https://${primaryDomain}/?checkout=cancelled`;
+
+    res.redirect(redirectUrl);
+  });
+
+  app.get("/api/stripe/subscription-status", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+
+      if (!user?.stripeSubscriptionId) {
+        return res.json({ active: false, subscription: null });
+      }
+
+      const result = await db.execute(
+        rawSql`SELECT id, status, current_period_end, cancel_at_period_end FROM stripe.subscriptions WHERE id = ${user.stripeSubscriptionId}`
+      );
+
+      if (!result.rows.length) {
+        return res.json({ active: false, subscription: null });
+      }
+
+      const sub = result.rows[0] as any;
+      const active = sub.status === 'active' || sub.status === 'trialing';
+
+      res.json({
+        active,
+        subscription: {
+          id: sub.id,
+          status: sub.status,
+          currentPeriodEnd: sub.current_period_end,
+          cancelAtPeriodEnd: sub.cancel_at_period_end,
+        },
+      });
+    } catch (err: any) {
+      console.error("Subscription status error:", err);
+      res.json({ active: false, subscription: null });
+    }
+  });
+
+  app.post("/api/stripe/customer-portal", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+
+      if (!user?.stripeCustomerId) {
+        return res.status(400).json({ error: "No Stripe customer found" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const domains = process.env.REPLIT_DOMAINS || "";
+      const primaryDomain = domains.split(",")[0]?.trim() || "";
+      const baseUrl = primaryDomain ? `https://${primaryDomain}` : `${req.protocol}://${req.get("host")}`;
+
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: user.stripeCustomerId,
+        return_url: baseUrl,
+      });
+
+      res.json({ url: portalSession.url });
+    } catch (err: any) {
+      console.error("Customer portal error:", err);
+      res.status(500).json({ error: "Failed to create portal session" });
+    }
   });
 
   const httpServer = createServer(app);
