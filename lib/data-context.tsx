@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { apiRequest } from './query-client';
+import { useAuth } from './auth-context';
 
 export interface MissedCall {
   id: string;
@@ -96,12 +97,16 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  const authRef = useRef(isAuthenticated);
+  authRef.current = isAuthenticated;
   const [missedCalls, setMissedCalls] = useState<MissedCall[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshCalls = useCallback(async () => {
+    if (!authRef.current) return;
     try {
       const res = await apiRequest('GET', '/api/missed-calls');
       const data = await res.json();
@@ -112,6 +117,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshJobs = useCallback(async () => {
+    if (!authRef.current) return;
     try {
       const res = await apiRequest('GET', '/api/jobs');
       const data = await res.json();
@@ -122,6 +128,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshSettings = useCallback(async () => {
+    if (!authRef.current) return;
     try {
       const res = await apiRequest('GET', '/api/settings');
       const data = await res.json();
@@ -136,19 +143,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [refreshCalls, refreshJobs, refreshSettings]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setMissedCalls([]);
+      setJobs([]);
+      setSettings(DEFAULT_SETTINGS);
+      setIsLoading(false);
+      return;
+    }
     (async () => {
+      setIsLoading(true);
       await refreshAll();
       setIsLoading(false);
     })();
-  }, [refreshAll]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     const interval = setInterval(() => {
       refreshCalls();
       refreshJobs();
     }, 10000);
     return () => clearInterval(interval);
-  }, [refreshCalls, refreshJobs]);
+  }, [isAuthenticated, refreshCalls, refreshJobs]);
 
   const addNewCall = useCallback(async (callerName: string, phoneNumber: string) => {
     const res = await apiRequest('POST', '/api/missed-calls', { callerName, phoneNumber });
