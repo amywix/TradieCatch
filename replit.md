@@ -95,15 +95,21 @@ Preferred communication style: Simple, everyday language.
 - **Server Build**: esbuild bundles server to `server_dist/`
 - **Landing Page**: Static HTML template served when accessing from non-app browsers
 
-### Subscription System (RevenueCat)
-- **Package**: `react-native-purchases` for RevenueCat integration
-- **Context**: `lib/subscription-context.tsx` provides `useSubscription()` hook with `isPro`, `isLoading`, `purchasePackage`, `restorePurchases`, `checkSubscription`
-- **Entitlement ID**: `pro` - checked against RevenueCat customer info
-- **Paywall**: `app/paywall.tsx` - $149/month subscription screen with free trial option, restore purchases, and skip option
-- **Premium gating**: Tabs layout redirects to paywall if onboarding not complete; subscription state managed via `SubscriptionProvider` wrapping the app
-- **Settings integration**: Subscription section in Settings shows current plan status and upgrade button
-- **API Key**: Fetched from server via `GET /api/config` which reads `REVENUECAT_API_KEY` env var
-- **RevenueCat works in Expo Go** via Preview API Mode - no native build required
+### Subscription System (Stripe)
+- **Package**: `stripe` + `stripe-replit-sync` for payment processing and data sync
+- **Context**: `lib/subscription-context.tsx` provides `useSubscription()` hook with `isPro`, `isLoading`, `subscription`, `checkSubscription`, `openCheckout`, `openCustomerPortal`
+- **Stripe Client**: `server/stripeClient.ts` - fetches credentials from Replit connection API, provides `getUncachableStripeClient()`, `getStripePublishableKey()`, `getStripeSync()`
+- **Webhook Handlers**: `server/webhookHandlers.ts` - processes Stripe webhooks via `stripe-replit-sync`
+- **Webhook Route**: Registered BEFORE `express.json()` in `server/index.ts` at `/api/stripe/webhook`
+- **Stripe Init**: On server startup, runs migrations, sets up managed webhook, and syncs backfill data
+- **Paywall**: `app/paywall.tsx` - $149/month subscription screen, opens Stripe Checkout, "Already subscribed?" link, "Skip for now" for testing
+- **Premium gating**: Tabs layout redirects to paywall if subscription not active; subscription state managed via `SubscriptionProvider`
+- **Settings integration**: Subscription section shows current plan status, "Manage" button opens Stripe Customer Portal for active subscribers
+- **Checkout flow**: `POST /api/stripe/create-checkout` creates a Stripe Checkout Session, redirects to `/api/stripe/checkout-success` on completion
+- **Subscription status**: `GET /api/stripe/subscription-status` checks `stripe.subscriptions` table
+- **Customer Portal**: `POST /api/stripe/customer-portal` creates a Stripe Billing Portal session for subscription management
+- **Seed Script**: `server/seed-stripe-product.ts` - creates TradieCatch Pro product ($149/month AUD) via Stripe API
+- **Database**: Users table has `stripe_customer_id` and `stripe_subscription_id` columns; Stripe data synced to `stripe` schema automatically
 
 ## External Dependencies
 
