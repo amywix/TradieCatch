@@ -1,17 +1,15 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
-import Purchases from "react-native-purchases";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { DataProvider } from "@/lib/data-context";
 import { SubscriptionProvider } from "@/lib/subscription-context";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
-import { apiRequest } from "@/lib/query-client";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -58,21 +56,6 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
-
-  useEffect(() => {
-    async function initRevenueCat() {
-      try {
-        const res = await apiRequest('GET', '/api/config');
-        const config = await res.json();
-        if (config.revenueCatApiKey) {
-          Purchases.configure({ apiKey: config.revenueCatApiKey });
-        }
-      } catch (err) {
-        console.log("RevenueCat init error:", err);
-      }
-    }
-    initRevenueCat();
-  }, []);
 
   useEffect(() => {
     if (fontsLoaded) {

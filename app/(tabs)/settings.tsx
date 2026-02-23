@@ -17,7 +17,7 @@ import { router } from 'expo-router';
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { settings, updateAppSettings, updateServices } = useData();
-  const { isPro } = useSubscription();
+  const { isPro, openCustomerPortal } = useSubscription();
   const { user, logout } = useAuth();
   const [businessName, setBusinessName] = useState(settings.businessName);
   const [editingName, setEditingName] = useState(false);
@@ -245,7 +245,14 @@ export default function SettingsScreen() {
                   </Text>
                 </View>
               </View>
-              {!isPro && (
+              {isPro ? (
+                <Pressable
+                  style={[styles.upgradeBtn, { backgroundColor: Colors.surface }]}
+                  onPress={openCustomerPortal}
+                >
+                  <Text style={[styles.upgradeBtnText, { color: Colors.accent }]}>Manage</Text>
+                </Pressable>
+              ) : (
                 <Pressable
                   style={styles.upgradeBtn}
                   onPress={() => router.push('/paywall')}
