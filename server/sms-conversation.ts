@@ -316,13 +316,14 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
 
         await db.insert(jobs).values({
           userId: callUserId,
-          callerName: call.callerName,
+          callerName: call.callerName || updates.callerName,
           phoneNumber: call.phoneNumber,
           jobType: call.selectedService || updates.selectedService || "General",
           date: dateStr,
           time: timeSlot,
           address: call.jobAddress || updates.jobAddress || "",
           notes: call.selectedSubOption || updates.selectedSubOption || "",
+          email: call.callerEmail || updates.callerEmail || null,
           status: "confirmed",
           missedCallId: call.id,
           isUrgent: call.isUrgent || updates.isUrgent || false,
@@ -358,13 +359,14 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
 
       await db.insert(jobs).values({
         userId: callUserId,
-        callerName: call.callerName,
+        callerName: call.callerName || updates.callerName,
         phoneNumber: call.phoneNumber,
         jobType: call.selectedService || updates.selectedService || "General",
         date: dateStr,
         time: timeLabel,
         address: call.jobAddress || updates.jobAddress || "",
         notes: call.selectedSubOption || updates.selectedSubOption || "",
+        email: call.callerEmail || updates.callerEmail || null,
         status: (call.isUrgent || updates.isUrgent) ? "confirmed" : "pending",
         missedCallId: call.id,
         isUrgent: call.isUrgent || updates.isUrgent || false,
