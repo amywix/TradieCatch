@@ -16,6 +16,7 @@ export interface MissedCall {
   selectedTime: string | null;
   jobAddress: string | null;
   isUrgent: boolean;
+  callerEmail: string | null;
   conversationLog: Array<{ role: string; message: string; timestamp: string }>;
 }
 
@@ -28,6 +29,7 @@ export interface Job {
   time: string | null;
   address: string | null;
   notes: string | null;
+  email: string | null;
   status: string;
   createdAt: string;
   missedCallId: string | null;

@@ -66,6 +66,7 @@ async function addJobToCalendar(job: Job) {
   const notes = [
     job.callerName ? `Customer: ${job.callerName}` : '',
     job.phoneNumber ? `Phone: ${job.phoneNumber}` : '',
+    job.email ? `Email: ${job.email}` : '',
     job.isUrgent ? 'URGENT' : '',
     job.notes || '',
   ].filter(Boolean).join('\n');
@@ -145,6 +146,13 @@ function JobItem({ item, onStatusChange, onDelete }: {
             <View style={styles.jobDetail}>
               <Ionicons name="location-outline" size={14} color={Colors.textSecondary} />
               <Text style={styles.jobDetailText} numberOfLines={1}>{item.address}</Text>
+            </View>
+          )}
+
+          {!!item.email && (
+            <View style={styles.jobDetail}>
+              <Ionicons name="mail-outline" size={14} color={Colors.textSecondary} />
+              <Text style={styles.jobDetailText} numberOfLines={1}>{item.email}</Text>
             </View>
           )}
 
