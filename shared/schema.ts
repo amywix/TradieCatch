@@ -32,6 +32,7 @@ export const missedCalls = pgTable("missed_calls", {
   selectedTime: text("selected_time"),
   jobAddress: text("job_address"),
   isUrgent: boolean("is_urgent").default(false),
+  callerEmail: text("caller_email"),
   conversationLog: jsonb("conversation_log").$type<Array<{role: string; message: string; timestamp: string}>>().default([]),
 });
 
@@ -47,6 +48,7 @@ export const jobs = pgTable("jobs", {
   time: text("time"),
   address: text("address"),
   notes: text("notes"),
+  email: text("email"),
   status: text("status").default("pending").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   missedCallId: varchar("missed_call_id"),
