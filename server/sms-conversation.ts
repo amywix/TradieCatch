@@ -96,7 +96,7 @@ export async function sendInitialMissedCallSms(callId: string, userId: string): 
   const servicesList = await getServices(userId);
   const menuText = buildServicesMenuText(servicesList);
 
-  const message = `Hi! Sorry we missed your call!\nThis is ${businessName}\nWhat can we help you with today?\n\nReply with the number below:\n\n${menuText}`;
+  const message = `Hi! Sorry we missed your call!\nThis is ${businessName}.\n\nCan we grab your name to get started?`;
 
   await sendSms(call.phoneNumber, message, userId);
 
@@ -106,7 +106,7 @@ export async function sendInitialMissedCallSms(callId: string, userId: string): 
   await db.update(missedCalls).set({
     replied: true,
     repliedAt: new Date(),
-    conversationState: "awaiting_service",
+    conversationState: "awaiting_name",
     conversationLog: log,
   }).where(eq(missedCalls.id, callId));
 }
@@ -181,6 +181,14 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
   const choiceRegex = new RegExp(`[^1-${maxChoice}]`, "g");
 
   switch (state) {
+    case "awaiting_name": {
+      updates.callerName = reply;
+      const menuText = buildServicesMenuText(servicesList);
+      response = `Thanks ${reply}! What can we help you with today?\n\nReply with the number below:\n\n${menuText}`;
+      newState = "awaiting_service";
+      break;
+    }
+
     case "awaiting_service": {
       const choice = reply.replace(choiceRegex, "");
       if (choice && SERVICES[choice]) {
@@ -246,15 +254,28 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
 
     case "awaiting_address": {
       updates.jobAddress = reply;
-      const booking = await getBookingConfig(callUserId);
-      if (booking.enabled) {
-        const dates = getNextAvailableDates(5);
-        const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
-        response = `What day works best for you?\n\n${dateMenu}`;
-        newState = "awaiting_booking_date";
+      response = `Almost done! What's the best email address to send confirmation and updates to?`;
+      newState = "awaiting_email";
+      break;
+    }
+
+    case "awaiting_email": {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (emailRegex.test(reply)) {
+        updates.callerEmail = reply.toLowerCase();
+        const booking = await getBookingConfig(callUserId);
+        if (booking.enabled) {
+          const dates = getNextAvailableDates(5);
+          const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+          response = `Thanks! What day works best for you?\n\n${dateMenu}`;
+          newState = "awaiting_booking_date";
+        } else {
+          response = `Thanks! And what's the best time:\n1. Morning\n2. Afternoon\n3. ASAP`;
+          newState = "awaiting_time";
+        }
       } else {
-        response = `And what's the best time:\n1. Morning\n2. Afternoon\n3. ASAP`;
-        newState = "awaiting_time";
+        response = `That doesn't look like a valid email. Could you double-check and send it again?`;
+        newState = "awaiting_email";
       }
       break;
     }
