@@ -131,6 +131,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const allSettings = await db.select().from(settings);
+      const configuredNumbers = allSettings.map(s => s.twilioPhoneNumber || "(empty)");
+      console.log(`Looking for Twilio number ${to} among configured numbers: ${JSON.stringify(configuredNumbers)}`);
       settingsRow = allSettings.find(s => {
         const twilioNum = s.twilioPhoneNumber || "";
         return phonesMatchSimple(twilioNum, to);
