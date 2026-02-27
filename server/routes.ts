@@ -19,6 +19,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", login);
   app.get("/api/auth/me", requireAuth, getMe as any);
 
+  app.get("/api/debug/twilio-numbers", async (_req: Request, res: Response) => {
+    try {
+      const allSettings = await db.select({
+        userId: settings.userId,
+        twilioPhoneNumber: settings.twilioPhoneNumber,
+        businessName: settings.businessName,
+      }).from(settings);
+      const dbUrl = process.env.DATABASE_URL || "";
+      const maskedUrl = dbUrl.replace(/\/\/.*@/, "//***@");
+      res.json({
+        dbConnection: maskedUrl,
+        settingsCount: allSettings.length,
+        configuredNumbers: allSettings.map(s => ({
+          userId: s.userId?.slice(0, 8) + "...",
+          number: s.twilioPhoneNumber || "(empty)",
+          name: s.businessName || "(unnamed)",
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/config", async (req: Request, res: Response) => {
     const domains = process.env.REPLIT_DOMAINS || "";
     const primaryDomain = domains.split(",")[0]?.trim() || "";
