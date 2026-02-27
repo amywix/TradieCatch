@@ -1,7 +1,7 @@
 import twilio from "twilio";
 import { db } from "./db";
 import { missedCalls, jobs, settings, DEFAULT_SERVICES } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 
 async function getSettingsForUser(userId: string) {
   const rows = await db.select().from(settings).where(eq(settings.userId, userId));
@@ -134,7 +134,8 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
   let rows;
   if (userId) {
     rows = await db.select().from(missedCalls)
-      .where(and(eq(missedCalls.userId, userId), eq(missedCalls.phoneNumber, normalizedPhone)));
+      .where(and(eq(missedCalls.userId, userId), eq(missedCalls.phoneNumber, normalizedPhone)))
+      .orderBy(desc(missedCalls.timestamp));
 
     if (rows.length === 0) {
       const allCalls = await db.select().from(missedCalls).where(eq(missedCalls.userId, userId));
@@ -142,7 +143,8 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
     }
   } else {
     rows = await db.select().from(missedCalls)
-      .where(eq(missedCalls.phoneNumber, normalizedPhone));
+      .where(eq(missedCalls.phoneNumber, normalizedPhone))
+      .orderBy(desc(missedCalls.timestamp));
 
     if (rows.length === 0) {
       const allCalls = await db.select().from(missedCalls);
@@ -150,12 +152,13 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
     }
   }
 
-  let call = rows.find(c => c.conversationState !== "none" && c.conversationState !== "completed");
+  const activeCalls = rows.filter(c => c.conversationState !== "none" && c.conversationState !== "completed");
+  let call = activeCalls.length > 0 ? activeCalls[0] : null;
 
   if (!call) {
     const allByPhone = rows.filter(c => c.replied);
     if (allByPhone.length > 0) {
-      call = allByPhone[allByPhone.length - 1];
+      call = allByPhone[0];
     }
   }
 

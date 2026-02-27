@@ -127,11 +127,11 @@ var db = drizzle(pool, { schema: schema_exports });
 
 // server/routes.ts
 import { sql as rawSql } from "drizzle-orm";
-import { eq as eq3, desc, and as and2 } from "drizzle-orm";
+import { eq as eq3, desc as desc2, and as and2 } from "drizzle-orm";
 
 // server/sms-conversation.ts
 import twilio from "twilio";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 async function getSettingsForUser(userId) {
   const rows = await db.select().from(settings).where(eq(settings.userId, userId));
   return rows[0];
@@ -246,23 +246,24 @@ async function handleIncomingReply(fromPhone, body, toPhone) {
   }
   let rows;
   if (userId) {
-    rows = await db.select().from(missedCalls).where(and(eq(missedCalls.userId, userId), eq(missedCalls.phoneNumber, normalizedPhone)));
+    rows = await db.select().from(missedCalls).where(and(eq(missedCalls.userId, userId), eq(missedCalls.phoneNumber, normalizedPhone))).orderBy(desc(missedCalls.timestamp));
     if (rows.length === 0) {
       const allCalls = await db.select().from(missedCalls).where(eq(missedCalls.userId, userId));
       rows = allCalls.filter((c) => phonesMatch(c.phoneNumber, normalizedPhone));
     }
   } else {
-    rows = await db.select().from(missedCalls).where(eq(missedCalls.phoneNumber, normalizedPhone));
+    rows = await db.select().from(missedCalls).where(eq(missedCalls.phoneNumber, normalizedPhone)).orderBy(desc(missedCalls.timestamp));
     if (rows.length === 0) {
       const allCalls = await db.select().from(missedCalls);
       rows = allCalls.filter((c) => phonesMatch(c.phoneNumber, normalizedPhone));
     }
   }
-  let call = rows.find((c) => c.conversationState !== "none" && c.conversationState !== "completed");
+  const activeCalls = rows.filter((c) => c.conversationState !== "none" && c.conversationState !== "completed");
+  let call = activeCalls.length > 0 ? activeCalls[0] : null;
   if (!call) {
     const allByPhone = rows.filter((c) => c.replied);
     if (allByPhone.length > 0) {
-      call = allByPhone[allByPhone.length - 1];
+      call = allByPhone[0];
     }
   }
   if (!call) {
@@ -762,7 +763,7 @@ async function registerRoutes(app2) {
     });
   });
   app2.get("/api/missed-calls", requireAuth, async (req, res) => {
-    const rows = await db.select().from(missedCalls).where(eq3(missedCalls.userId, req.userId)).orderBy(desc(missedCalls.timestamp));
+    const rows = await db.select().from(missedCalls).where(eq3(missedCalls.userId, req.userId)).orderBy(desc2(missedCalls.timestamp));
     res.json(rows);
   });
   app2.post("/api/missed-calls", requireAuth, async (req, res) => {
@@ -844,7 +845,7 @@ async function registerRoutes(app2) {
         return;
       }
       userId = settingsRow.userId;
-      const existingCalls = await db.select().from(missedCalls).where(and2(eq3(missedCalls.userId, userId), eq3(missedCalls.phoneNumber, from))).orderBy(desc(missedCalls.timestamp)).limit(1);
+      const existingCalls = await db.select().from(missedCalls).where(and2(eq3(missedCalls.userId, userId), eq3(missedCalls.phoneNumber, from))).orderBy(desc2(missedCalls.timestamp)).limit(1);
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1e3);
       const isDuplicate = existingCalls.length > 0 && new Date(existingCalls[0].timestamp) > fiveMinAgo;
       if (!isDuplicate) {
@@ -878,7 +879,7 @@ async function registerRoutes(app2) {
 </Response>`);
   });
   app2.get("/api/jobs", requireAuth, async (req, res) => {
-    const rows = await db.select().from(jobs).where(eq3(jobs.userId, req.userId)).orderBy(desc(jobs.createdAt));
+    const rows = await db.select().from(jobs).where(eq3(jobs.userId, req.userId)).orderBy(desc2(jobs.createdAt));
     res.json(rows);
   });
   app2.post("/api/jobs", requireAuth, async (req, res) => {
