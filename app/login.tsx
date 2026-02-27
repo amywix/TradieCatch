@@ -25,9 +25,9 @@ export default function LoginScreen() {
     setIsSkipping(true);
     try {
       try {
-        await login('test@tradiecatch.com', 'test123456');
+        await login('admin@tradiecatch.com', 'test123456');
       } catch {
-        await register('test@tradiecatch.com', 'Test Tradie', 'test123456');
+        await register('admin@tradiecatch.com', 'TradieCatch Admin', 'test123456');
       }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Could not create test account.');
