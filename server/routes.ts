@@ -44,11 +44,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/config", async (req: Request, res: Response) => {
     const domains = process.env.REPLIT_DOMAINS || "";
-    const primaryDomain = domains.split(",")[0]?.trim() || "";
+    const domainList = domains.split(",").map(d => d.trim()).filter(Boolean);
+    const deploymentDomain = process.env.DEPLOYMENT_DOMAIN
+      || domainList.find(d => d.endsWith('.replit.app'))
+      || "";
     const protocol = req.protocol || "https";
     const hostFromHeader = req.get("host") || "";
-    const appUrl = primaryDomain
-      ? `https://${primaryDomain}`
+    const appUrl = deploymentDomain
+      ? `https://${deploymentDomain}`
       : hostFromHeader
         ? `${protocol}://${hostFromHeader}`
         : "";
