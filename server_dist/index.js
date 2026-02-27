@@ -1136,6 +1136,8 @@ var WebhookHandlers = class {
 };
 
 // server/index.ts
+import { eq as eq4 } from "drizzle-orm";
+import bcrypt2 from "bcryptjs";
 import * as fs from "fs";
 import * as path from "path";
 var app = express();
@@ -1299,6 +1301,63 @@ function setupErrorHandler(app2) {
     return res.status(status).json({ message });
   });
 }
+async function bootstrapDefaultUser() {
+  const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+  if (!twilioPhone) {
+    log("No TWILIO_PHONE_NUMBER env var set, skipping bootstrap");
+    return;
+  }
+  try {
+    const allUsers = await db.select().from(users);
+    if (allUsers.length > 0) {
+      const allSettings = await db.select().from(settings);
+      const hasMatchingNumber = allSettings.some((s) => s.twilioPhoneNumber === twilioPhone);
+      if (hasMatchingNumber) {
+        log(`Bootstrap: Twilio number ${twilioPhone} already configured`);
+        return;
+      }
+      const firstUser = allUsers[0];
+      const userSettings = allSettings.find((s) => s.userId === firstUser.id);
+      if (userSettings && !userSettings.twilioPhoneNumber) {
+        await db.update(settings).set({
+          twilioPhoneNumber: twilioPhone,
+          twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || "",
+          twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || "",
+          businessName: userSettings.businessName || "TradieCatch"
+        }).where(eq4(settings.userId, firstUser.id));
+        log(`Bootstrap: Updated user ${firstUser.email} with Twilio number ${twilioPhone}`);
+        return;
+      }
+      log("Bootstrap: Users exist but Twilio number not matched to any");
+      return;
+    }
+    log("Bootstrap: No users found, creating default account...");
+    const hashedPassword = await bcrypt2.hash("test123456", 12);
+    const [user] = await db.insert(users).values({
+      email: "admin@tradiecatch.com",
+      username: "TradieCatch Admin",
+      password: hashedPassword
+    }).returning();
+    await db.insert(settings).values({
+      userId: user.id,
+      businessName: "TradieCatch",
+      autoReplyEnabled: true,
+      services: DEFAULT_SERVICES,
+      twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || "",
+      twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || "",
+      twilioPhoneNumber: twilioPhone
+    });
+    await db.insert(smsTemplates).values({
+      userId: user.id,
+      name: "Missed Call Auto-Reply",
+      message: "Hi! Sorry we missed your call. We'll get back to you shortly.",
+      isDefault: true
+    });
+    log(`Bootstrap: Created default user (admin@tradiecatch.com) with Twilio number ${twilioPhone}`);
+  } catch (err) {
+    console.error("Bootstrap error:", err);
+  }
+}
 async function initStripe() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -1361,7 +1420,7 @@ async function initStripe() {
     },
     () => {
       log(`express server serving on port ${port}`);
-      initStripe().catch((err) => console.error("Stripe init error (non-fatal):", err));
+      bootstrapDefaultUser().then(() => initStripe()).catch((err) => console.error("Startup init error (non-fatal):", err));
     }
   );
 })();
