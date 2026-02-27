@@ -190,12 +190,17 @@ function configureExpoAndLanding(app: express.Application) {
     }
 
     if (req.path === "/") {
-      return serveLandingPage({
-        req,
-        res,
-        landingPageTemplate,
-        appName,
-      });
+      try {
+        return serveLandingPage({
+          req,
+          res,
+          landingPageTemplate,
+          appName,
+        });
+      } catch (err) {
+        console.error("Landing page error:", err);
+        return res.status(200).send("OK");
+      }
     }
 
     next();
@@ -259,6 +264,10 @@ async function initStripe() {
 (async () => {
   setupCors(app);
 
+  app.get('/healthz', (_req, res) => {
+    res.status(200).send('ok');
+  });
+
   app.post(
     '/api/stripe/webhook',
     express.raw({ type: 'application/json' }),
@@ -287,8 +296,6 @@ async function initStripe() {
 
   configureExpoAndLanding(app);
 
-  await initStripe();
-
   const server = await registerRoutes(app);
 
   setupErrorHandler(app);
@@ -302,6 +309,7 @@ async function initStripe() {
     },
     () => {
       log(`express server serving on port ${port}`);
+      initStripe().catch(err => console.error('Stripe init error (non-fatal):', err));
     },
   );
 })();
