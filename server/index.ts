@@ -248,14 +248,25 @@ async function bootstrapDefaultUser() {
     const allUsers = await db.select().from(users);
     if (allUsers.length > 0) {
       const allSettings = await db.select().from(settings);
+      const firstUser = allUsers[0];
+      const userSettings = allSettings.find(s => s.userId === firstUser.id);
+
+      if (userSettings && !userSettings.bookingCalendarEnabled) {
+        await db.update(settings)
+          .set({
+            bookingCalendarEnabled: true,
+            bookingSlots: userSettings.bookingSlots || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
+          })
+          .where(eq(settings.userId, firstUser.id));
+        log(`Bootstrap: Enabled booking calendar for user ${firstUser.email}`);
+      }
+
       const hasMatchingNumber = allSettings.some(s => s.twilioPhoneNumber === twilioPhone);
       if (hasMatchingNumber) {
         log(`Bootstrap: Twilio number ${twilioPhone} already configured`);
         return;
       }
 
-      const firstUser = allUsers[0];
-      const userSettings = allSettings.find(s => s.userId === firstUser.id);
       if (userSettings && !userSettings.twilioPhoneNumber) {
         await db.update(settings)
           .set({
@@ -266,7 +277,6 @@ async function bootstrapDefaultUser() {
           })
           .where(eq(settings.userId, firstUser.id));
         log(`Bootstrap: Updated user ${firstUser.email} with Twilio number ${twilioPhone}`);
-        return;
       }
       log('Bootstrap: Users exist but Twilio number not matched to any');
       return;
@@ -284,6 +294,8 @@ async function bootstrapDefaultUser() {
       userId: user.id,
       businessName: 'TradieCatch',
       autoReplyEnabled: true,
+      bookingCalendarEnabled: true,
+      bookingSlots: ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
       services: DEFAULT_SERVICES,
       twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
       twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
