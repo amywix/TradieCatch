@@ -78,3 +78,4 @@ ensurePreviewReachable = "/status"
 
 [userenv.shared]
 DEPLOYMENT_DOMAIN = "tradiecatch.replit.app"
+EXPO_PUBLIC_DEPLOYMENT_DOMAIN = "tradiecatch.replit.app"
