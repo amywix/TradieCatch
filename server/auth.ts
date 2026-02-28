@@ -50,7 +50,12 @@ export async function register(req: Request, res: Response) {
       userId: user.id,
       businessName: "",
       autoReplyEnabled: true,
+      bookingCalendarEnabled: true,
+      bookingSlots: ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
       services: DEFAULT_SERVICES,
+      twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || "",
+      twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || "",
+      twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || "",
     });
 
     await db.insert(smsTemplates).values({
