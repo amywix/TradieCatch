@@ -1277,10 +1277,9 @@ function configureExpoAndLanding(app2) {
     if (platform && (platform === "ios" || platform === "android")) {
       return serveExpoManifest(platform, res);
     }
-    const isProduction = process.env.REPLIT_DEPLOYMENT === "1" || process.env.NODE_ENV === "production";
     const webBuildPath = path.resolve(process.cwd(), "web-build", "index.html");
     const hasWebBuild = fs.existsSync(webBuildPath);
-    if (req.path === "/" && hasWebBuild && isProduction) {
+    if (req.path === "/" && hasWebBuild) {
       return res.sendFile(webBuildPath);
     }
     if (req.path === "/") {
@@ -1304,8 +1303,7 @@ function configureExpoAndLanding(app2) {
   app2.get("/{*path}", (req, res, next) => {
     if (req.path.startsWith("/api")) return next();
     const webIndex = path.resolve(process.cwd(), "web-build", "index.html");
-    const isProduction = process.env.REPLIT_DEPLOYMENT === "1" || process.env.NODE_ENV === "production";
-    if (isProduction && fs.existsSync(webIndex)) {
+    if (fs.existsSync(webIndex)) {
       return res.sendFile(webIndex);
     }
     next();

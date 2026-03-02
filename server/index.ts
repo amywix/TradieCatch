@@ -193,11 +193,10 @@ function configureExpoAndLanding(app: express.Application) {
       return serveExpoManifest(platform, res);
     }
 
-    const isProduction = process.env.REPLIT_DEPLOYMENT === "1" || process.env.NODE_ENV === "production";
     const webBuildPath = path.resolve(process.cwd(), "web-build", "index.html");
     const hasWebBuild = fs.existsSync(webBuildPath);
 
-    if (req.path === "/" && hasWebBuild && isProduction) {
+    if (req.path === "/" && hasWebBuild) {
       return res.sendFile(webBuildPath);
     }
 
@@ -225,8 +224,7 @@ function configureExpoAndLanding(app: express.Application) {
   app.get("/{*path}", (req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith("/api")) return next();
     const webIndex = path.resolve(process.cwd(), "web-build", "index.html");
-    const isProduction = process.env.REPLIT_DEPLOYMENT === "1" || process.env.NODE_ENV === "production";
-    if (isProduction && fs.existsSync(webIndex)) {
+    if (fs.existsSync(webIndex)) {
       return res.sendFile(webIndex);
     }
     next();
