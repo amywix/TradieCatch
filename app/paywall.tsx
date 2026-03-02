@@ -69,7 +69,7 @@ export default function PaywallScreen() {
             <Text style={styles.priceBadgeText}>MOST POPULAR</Text>
           </View>
           <View style={styles.priceRow}>
-            <Text style={styles.priceAmount}>$149</Text>
+            <Text style={styles.priceAmount}>$99</Text>
             <Text style={styles.pricePeriod}>/month</Text>
           </View>
           <Text style={styles.priceDesc}>Cancel anytime. No lock-in contracts.</Text>
@@ -85,7 +85,7 @@ export default function PaywallScreen() {
           {purchasing ? (
             <ActivityIndicator size="small" color={Colors.white} />
           ) : (
-            <Text style={styles.subscribeBtnText}>Subscribe - $149/month</Text>
+            <Text style={styles.subscribeBtnText}>Subscribe - $99/month</Text>
           )}
         </Pressable>
 

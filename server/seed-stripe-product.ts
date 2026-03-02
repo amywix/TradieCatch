@@ -25,7 +25,7 @@ async function createSubscriptionProduct() {
 
   const monthlyPrice = await stripe.prices.create({
     product: product.id,
-    unit_amount: 14900,
+    unit_amount: 9900,
     currency: 'aud',
     recurring: { interval: 'month' },
   });
