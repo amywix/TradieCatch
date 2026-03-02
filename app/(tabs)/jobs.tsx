@@ -214,7 +214,13 @@ export default function JobsScreen() {
     setRefreshing(false);
   }, [refreshAll]);
 
+  const [statusPickerJob, setStatusPickerJob] = useState<Job | null>(null);
+
   const handleStatusChange = useCallback((job: Job) => {
+    if (Platform.OS === 'web') {
+      setStatusPickerJob(job);
+      return;
+    }
     const statuses = ['pending', 'confirmed', 'completed', 'cancelled'];
     const labels = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
@@ -229,6 +235,12 @@ export default function JobsScreen() {
       { text: 'Cancel', style: 'cancel' as const },
     ]);
   }, [updateExistingJob]);
+
+  const handleWebStatusSelect = useCallback(async (status: string) => {
+    if (!statusPickerJob) return;
+    await updateExistingJob(statusPickerJob.id, { status });
+    setStatusPickerJob(null);
+  }, [statusPickerJob, updateExistingJob]);
 
   const handleDelete = useCallback((id: string) => {
     Alert.alert('Delete Job', 'Remove this job?', [
@@ -313,6 +325,33 @@ export default function JobsScreen() {
           )
         }
       />
+
+      {statusPickerJob && (
+        <Pressable style={styles.modalOverlay} onPress={() => setStatusPickerJob(null)}>
+          <Pressable style={styles.statusModal} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.statusModalTitle}>Update Status</Text>
+            <Text style={styles.statusModalSub}>{statusPickerJob.callerName} - {statusPickerJob.jobType}</Text>
+            {(['pending', 'confirmed', 'completed', 'cancelled'] as const).map((status) => {
+              const config = STATUS_CONFIG[status];
+              const isActive = statusPickerJob.status === status;
+              return (
+                <Pressable
+                  key={status}
+                  style={[styles.statusOption, isActive && styles.statusOptionActive]}
+                  onPress={() => handleWebStatusSelect(status)}
+                >
+                  <View style={[styles.statusDot, { backgroundColor: config.color }]} />
+                  <Text style={[styles.statusOptionText, isActive && { fontWeight: '700' }]}>{config.label}</Text>
+                  {isActive && <Ionicons name="checkmark" size={18} color={config.color} />}
+                </Pressable>
+              );
+            })}
+            <Pressable style={styles.statusCancelBtn} onPress={() => setStatusPickerJob(null)}>
+              <Text style={styles.statusCancelText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -523,5 +562,65 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  statusModal: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+    maxWidth: 340,
+  },
+  statusModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  statusModalSub: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    marginBottom: 16,
+  },
+  statusOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  statusOptionActive: {
+    backgroundColor: Colors.surfaceSecondary,
+  },
+  statusOptionText: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.text,
+    flex: 1,
+  },
+  statusCancelBtn: {
+    marginTop: 12,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  statusCancelText: {
+    fontSize: 15,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.textSecondary,
   },
 });

@@ -30,7 +30,7 @@ async function createSubscriptionProduct() {
     recurring: { interval: 'month' },
   });
 
-  console.log('Created monthly price:', monthlyPrice.id, '- $149/month AUD');
+  console.log('Created monthly price:', monthlyPrice.id, '- $99/month AUD');
   console.log('Done! The webhook will sync this to your database automatically.');
 }
 
