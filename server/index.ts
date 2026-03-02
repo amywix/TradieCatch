@@ -193,6 +193,14 @@ function configureExpoAndLanding(app: express.Application) {
       return serveExpoManifest(platform, res);
     }
 
+    const isProduction = process.env.REPLIT_DEPLOYMENT === "1" || process.env.NODE_ENV === "production";
+    const webBuildPath = path.resolve(process.cwd(), "web-build", "index.html");
+    const hasWebBuild = fs.existsSync(webBuildPath);
+
+    if (req.path === "/" && hasWebBuild && isProduction) {
+      return res.sendFile(webBuildPath);
+    }
+
     if (req.path === "/") {
       try {
         return serveLandingPage({
@@ -211,7 +219,18 @@ function configureExpoAndLanding(app: express.Application) {
   });
 
   app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
+  app.use(express.static(path.resolve(process.cwd(), "web-build")));
   app.use(express.static(path.resolve(process.cwd(), "static-build")));
+
+  app.get("/{*path}", (req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith("/api")) return next();
+    const webIndex = path.resolve(process.cwd(), "web-build", "index.html");
+    const isProduction = process.env.REPLIT_DEPLOYMENT === "1" || process.env.NODE_ENV === "production";
+    if (isProduction && fs.existsSync(webIndex)) {
+      return res.sendFile(webIndex);
+    }
+    next();
+  });
 
   log("Expo routing: Checking expo-platform header on / and /manifest");
 }
