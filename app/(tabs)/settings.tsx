@@ -433,6 +433,88 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Get a Twilio Number</Text>
+          <View style={styles.card}>
+            <View style={styles.webhookIntro}>
+              <Ionicons name="phone-portrait-outline" size={20} color={Colors.accent} />
+              <Text style={styles.webhookIntroText}>
+                Twilio provides the phone number that receives your diverted calls and sends automated SMS replies. Follow these steps to get set up:
+              </Text>
+            </View>
+
+            <View style={styles.webhookStepsDivider} />
+
+            <View style={styles.webhookStep}>
+              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
+                <Text style={styles.webhookStepNumText}>1</Text>
+              </View>
+              <View style={styles.webhookStepContent}>
+                <Text style={styles.webhookStepTitle}>Create a Twilio account</Text>
+                <Text style={styles.webhookStepDesc}>
+                  Go to twilio.com and sign up for a free account. You'll get a free trial with credit to test.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.webhookStepConnector} />
+
+            <View style={styles.webhookStep}>
+              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
+                <Text style={styles.webhookStepNumText}>2</Text>
+              </View>
+              <View style={styles.webhookStepContent}>
+                <Text style={styles.webhookStepTitle}>Verify your number</Text>
+                <Text style={styles.webhookStepDesc}>
+                  Twilio will ask you to verify your mobile number. Enter the code they send you.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.webhookStepConnector} />
+
+            <View style={styles.webhookStep}>
+              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
+                <Text style={styles.webhookStepNumText}>3</Text>
+              </View>
+              <View style={styles.webhookStepContent}>
+                <Text style={styles.webhookStepTitle}>Get a phone number</Text>
+                <Text style={styles.webhookStepDesc}>
+                  In your Twilio console, go to Phone Numbers {'>'} Manage {'>'} Buy a Number. Search for an Australian number (prefix +61). Select one and purchase it (~$1.50 USD/month).
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.webhookStepConnector} />
+
+            <View style={styles.webhookStep}>
+              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
+                <Text style={styles.webhookStepNumText}>4</Text>
+              </View>
+              <View style={styles.webhookStepContent}>
+                <Text style={styles.webhookStepTitle}>Copy your credentials</Text>
+                <Text style={styles.webhookStepDesc}>
+                  From your Twilio dashboard (twilio.com/console), copy your Account SID, Auth Token, and the phone number you just bought.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.webhookStepConnector} />
+
+            <View style={styles.webhookStep}>
+              <View style={[styles.webhookStepNum, { backgroundColor: Colors.success }]}>
+                <Ionicons name="checkmark" size={14} color={Colors.white} />
+              </View>
+              <View style={styles.webhookStepContent}>
+                <Text style={styles.webhookStepTitle}>Enter them in Twilio Credentials below</Text>
+                <Text style={styles.webhookStepDesc}>
+                  Paste your Account SID, Auth Token, and phone number into the Twilio Credentials section on this screen. Then follow the Webhook Setup Guide to finish connecting.
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Twilio Connection</Text>
           <View style={styles.card}>
             <View style={styles.settingRow}>
@@ -805,6 +887,12 @@ export default function SettingsScreen() {
             <Text style={styles.aboutDescription}>
               Never lose a customer from a missed call. Auto-reply with SMS and book jobs on the spot.
             </Text>
+            <View style={styles.aboutDivider} />
+            <Pressable style={styles.privacyRow} onPress={() => router.push('/privacy-policy')}>
+              <Ionicons name="shield-checkmark-outline" size={16} color={Colors.primaryLight} />
+              <Text style={styles.privacyLink}>Privacy Policy</Text>
+              <Ionicons name="chevron-forward" size={14} color={Colors.textTertiary} />
+            </Pressable>
           </View>
         </View>
       </ScrollView>
@@ -1193,6 +1281,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: Colors.textSecondary,
     lineHeight: 20,
+  },
+  privacyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  privacyLink: {
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.primaryLight,
+    flex: 1,
   },
   logoutRow: {
     flexDirection: 'row',
