@@ -66,13 +66,13 @@ export default function PaywallScreen() {
 
         <Animated.View entering={FadeInUp.delay(500).duration(500)} style={styles.priceCard}>
           <View style={styles.priceBadge}>
-            <Text style={styles.priceBadgeText}>14-DAY FREE TRIAL</Text>
+            <Text style={styles.priceBadgeText}>7-DAY FREE TRIAL</Text>
           </View>
           <View style={styles.priceRow}>
             <Text style={styles.priceAmount}>$99</Text>
             <Text style={styles.pricePeriod}>/month</Text>
           </View>
-          <Text style={styles.priceDesc}>Try free for 14 days, then $99/month. Cancel anytime.</Text>
+          <Text style={styles.priceDesc}>Try free for 7 days, then $99/month. Cancel anytime.</Text>
         </Animated.View>
       </Animated.View>
 
@@ -85,7 +85,7 @@ export default function PaywallScreen() {
           {purchasing ? (
             <ActivityIndicator size="small" color={Colors.white} />
           ) : (
-            <Text style={styles.subscribeBtnText}>Start 14-Day Free Trial</Text>
+            <Text style={styles.subscribeBtnText}>Start 7-Day Free Trial</Text>
           )}
         </Pressable>
 
