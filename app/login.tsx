@@ -19,22 +19,7 @@ export default function LoginScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [isSkipping, setIsSkipping] = useState(false);
 
-  const handleSkip = async () => {
-    setIsSkipping(true);
-    try {
-      try {
-        await login('admin@tradiecatch.com', 'test123456');
-      } catch {
-        await register('admin@tradiecatch.com', 'TradieCatch Admin', 'test123456');
-      }
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not create test account.');
-    } finally {
-      setIsSkipping(false);
-    }
-  };
 
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) {
@@ -196,18 +181,6 @@ export default function LoginScreen() {
           </Pressable>
         </Animated.View>
 
-        <Pressable
-          style={styles.skipBtn}
-          onPress={handleSkip}
-          disabled={isSkipping}
-          testID="skip-btn"
-        >
-          {isSkipping ? (
-            <ActivityIndicator color="rgba(255,255,255,0.6)" size="small" />
-          ) : (
-            <Text style={styles.skipText}>Skip for testing</Text>
-          )}
-        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -318,16 +291,5 @@ const styles = StyleSheet.create({
   switchTextBold: {
     fontFamily: 'Inter_700Bold',
     color: Colors.accent,
-  },
-  skipBtn: {
-    marginTop: 24,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  skipText: {
-    fontSize: 14,
-    fontFamily: 'Inter_500Medium',
-    color: 'rgba(255,255,255,0.5)',
-    textDecorationLine: 'underline',
   },
 });

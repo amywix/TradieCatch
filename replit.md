@@ -102,7 +102,7 @@ Preferred communication style: Simple, everyday language.
 - **Webhook Handlers**: `server/webhookHandlers.ts` - processes Stripe webhooks via `stripe-replit-sync`
 - **Webhook Route**: Registered BEFORE `express.json()` in `server/index.ts` at `/api/stripe/webhook`
 - **Stripe Init**: On server startup, runs migrations, sets up managed webhook, and syncs backfill data
-- **Paywall**: `app/paywall.tsx` - $99/month subscription screen, opens Stripe Checkout, "Already subscribed?" link, "Skip for now" for testing
+- **Paywall**: `app/paywall.tsx` - $99/month subscription screen, opens Stripe Checkout, "Already subscribed?" link
 - **Premium gating**: Tabs layout redirects to paywall if subscription not active; subscription state managed via `SubscriptionProvider`
 - **Settings integration**: Subscription section shows current plan status, "Manage" button opens Stripe Customer Portal for active subscribers
 - **Checkout flow**: `POST /api/stripe/create-checkout` creates a Stripe Checkout Session, redirects to `/api/stripe/checkout-success` on completion

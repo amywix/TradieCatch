@@ -89,13 +89,9 @@ export default function PaywallScreen() {
           )}
         </Pressable>
 
-        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
           <Pressable onPress={handleAlreadySubscribed}>
             <Text style={styles.linkText}>Already subscribed?</Text>
-          </Pressable>
-          <Text style={styles.linkText}>|</Text>
-          <Pressable onPress={() => router.replace('/onboarding')}>
-            <Text style={styles.linkText}>Skip for now</Text>
           </Pressable>
         </View>
       </View>
