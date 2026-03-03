@@ -3,8 +3,8 @@ import Stripe from 'stripe';
 async function getCredentials() {
   if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY) {
     return {
-      secretKey: process.env.STRIPE_SECRET_KEY,
-      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+      secretKey: process.env.STRIPE_SECRET_KEY.replace(/\s+/g, '').trim(),
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY.replace(/\s+/g, '').trim(),
     };
   }
 
