@@ -242,7 +242,13 @@ export default function JobsScreen() {
     setStatusPickerJob(null);
   }, [statusPickerJob, updateExistingJob]);
 
+  const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
+
   const handleDelete = useCallback((id: string) => {
+    if (Platform.OS === 'web') {
+      setDeleteJobId(id);
+      return;
+    }
     Alert.alert('Delete Job', 'Remove this job?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -255,6 +261,12 @@ export default function JobsScreen() {
       },
     ]);
   }, [removeJob]);
+
+  const handleWebDeleteConfirm = useCallback(async () => {
+    if (!deleteJobId) return;
+    await removeJob(deleteJobId);
+    setDeleteJobId(null);
+  }, [deleteJobId, removeJob]);
 
   const renderItem = useCallback(({ item }: { item: Job }) => (
     <JobItem
@@ -325,6 +337,25 @@ export default function JobsScreen() {
           )
         }
       />
+
+      {deleteJobId && (
+        <Pressable style={styles.modalOverlay} onPress={() => setDeleteJobId(null)}>
+          <Pressable style={styles.statusModal} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.statusModalTitle}>Delete Job</Text>
+            <Text style={styles.statusModalSub}>This will permanently remove the job. This cannot be undone.</Text>
+            <Pressable
+              style={[styles.statusOption, { backgroundColor: '#FFF0F0' }]}
+              onPress={handleWebDeleteConfirm}
+            >
+              <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+              <Text style={[styles.statusOptionText, { color: Colors.danger }]}>Delete Job</Text>
+            </Pressable>
+            <Pressable style={styles.statusCancelBtn} onPress={() => setDeleteJobId(null)}>
+              <Text style={styles.statusCancelText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      )}
 
       {statusPickerJob && (
         <Pressable style={styles.modalOverlay} onPress={() => setStatusPickerJob(null)}>
