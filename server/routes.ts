@@ -375,6 +375,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         payment_method_types: ['card'],
         line_items: [{ price: priceId, quantity: 1 }],
         mode: 'subscription',
+        subscription_data: {
+          trial_period_days: 14,
+        },
         success_url: `${baseUrl}/api/stripe/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/api/stripe/checkout-cancel`,
       });
