@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, Platform, ActivityIndicator, Alert,
+  View, Text, StyleSheet, Pressable, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,29 +14,35 @@ export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const { openCheckout, checkSubscription } = useSubscription();
   const [purchasing, setPurchasing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [checkingSubscription, setCheckingSubscription] = useState(false);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
 
   const handleSubscribe = useCallback(async () => {
     setPurchasing(true);
+    setErrorMsg('');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
       await openCheckout();
     } catch (err: any) {
-      Alert.alert('Error', 'Could not open checkout. Please try again.');
+      setErrorMsg(err.message || 'Could not open checkout. Please try again.');
     } finally {
       setPurchasing(false);
     }
   }, [openCheckout]);
 
   const handleAlreadySubscribed = useCallback(async () => {
+    setCheckingSubscription(true);
+    setErrorMsg('');
     const active = await checkSubscription();
+    setCheckingSubscription(false);
     if (active) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/onboarding');
     } else {
-      Alert.alert('No subscription found', 'We couldn\'t find an active subscription for this account. Please subscribe first.');
+      setErrorMsg('No active subscription found. Please start your free trial first.');
     }
   }, [checkSubscription]);
 
@@ -77,6 +83,13 @@ export default function PaywallScreen() {
       </Animated.View>
 
       <View style={[styles.bottomSection, { paddingBottom: (Platform.OS === 'web' ? 34 : insets.bottom) + 16 }]}>
+        {errorMsg ? (
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle-outline" size={16} color={Colors.danger} />
+            <Text style={styles.errorText}>{errorMsg}</Text>
+          </View>
+        ) : null}
+
         <Pressable
           style={[styles.subscribeBtn, purchasing && styles.subscribeBtnDisabled]}
           onPress={handleSubscribe}
@@ -90,8 +103,12 @@ export default function PaywallScreen() {
         </Pressable>
 
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-          <Pressable onPress={handleAlreadySubscribed}>
-            <Text style={styles.linkText}>Already subscribed?</Text>
+          <Pressable onPress={handleAlreadySubscribed} disabled={checkingSubscription}>
+            {checkingSubscription ? (
+              <ActivityIndicator size="small" color={Colors.textSecondary} />
+            ) : (
+              <Text style={styles.linkText}>Already subscribed?</Text>
+            )}
           </Pressable>
         </View>
       </View>
@@ -240,5 +257,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FFF0F0',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FFD0D0',
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.danger,
+    lineHeight: 18,
   },
 });

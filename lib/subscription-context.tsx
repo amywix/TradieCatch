@@ -83,19 +83,15 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [isAuthenticated, checkSubscription]);
 
   const openCheckout = useCallback(async () => {
-    try {
-      const res = await apiRequest('POST', '/api/stripe/create-checkout');
-      const data = await res.json();
-      if (data.url) {
-        if (Platform.OS === 'web') {
-          window.location.href = data.url;
-        } else {
-          await Linking.openURL(data.url);
-        }
-      }
-    } catch (err) {
-      console.error('Checkout error:', err);
-      throw err;
+    const res = await apiRequest('POST', '/api/stripe/create-checkout');
+    const data = await res.json();
+    if (!res.ok || !data.url) {
+      throw new Error(data.error || 'Could not create checkout session. Please try again.');
+    }
+    if (Platform.OS === 'web') {
+      window.location.href = data.url;
+    } else {
+      await Linking.openURL(data.url);
     }
   }, []);
 

@@ -1054,17 +1054,15 @@ async function registerRoutes(app2) {
     }
     const domains = process.env.REPLIT_DOMAINS || "";
     const devDomain = process.env.REPLIT_DEV_DOMAIN || "";
-    const primaryDomain = domains.split(",")[0]?.trim() || devDomain;
-    const appPort = "8081";
-    const redirectUrl = devDomain ? `https://${devDomain}:${appPort}/?checkout=success` : `https://${primaryDomain}/?checkout=success`;
+    const primaryDomain = domains.split(",")[0]?.trim() || "";
+    const redirectUrl = primaryDomain ? `https://${primaryDomain}/?checkout=success` : devDomain ? `https://${devDomain}:8081/?checkout=success` : "/?checkout=success";
     res.redirect(redirectUrl);
   });
   app2.get("/api/stripe/checkout-cancel", async (req, res) => {
-    const devDomain = process.env.REPLIT_DEV_DOMAIN || "";
     const domains = process.env.REPLIT_DOMAINS || "";
-    const primaryDomain = domains.split(",")[0]?.trim() || devDomain;
-    const appPort = "8081";
-    const redirectUrl = devDomain ? `https://${devDomain}:${appPort}/?checkout=cancelled` : `https://${primaryDomain}/?checkout=cancelled`;
+    const devDomain = process.env.REPLIT_DEV_DOMAIN || "";
+    const primaryDomain = domains.split(",")[0]?.trim() || "";
+    const redirectUrl = primaryDomain ? `https://${primaryDomain}/?checkout=cancelled` : devDomain ? `https://${devDomain}:8081/?checkout=cancelled` : "/?checkout=cancelled";
     res.redirect(redirectUrl);
   });
   app2.get("/api/stripe/subscription-status", requireAuth, async (req, res) => {

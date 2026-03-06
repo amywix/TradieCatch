@@ -411,25 +411,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const domains = process.env.REPLIT_DOMAINS || "";
     const devDomain = process.env.REPLIT_DEV_DOMAIN || "";
-    const primaryDomain = domains.split(",")[0]?.trim() || devDomain;
-    const appPort = "8081";
+    const primaryDomain = domains.split(",")[0]?.trim() || "";
 
-    const redirectUrl = devDomain
-      ? `https://${devDomain}:${appPort}/?checkout=success`
-      : `https://${primaryDomain}/?checkout=success`;
+    const redirectUrl = primaryDomain
+      ? `https://${primaryDomain}/?checkout=success`
+      : devDomain
+      ? `https://${devDomain}:8081/?checkout=success`
+      : "/?checkout=success";
 
     res.redirect(redirectUrl);
   });
 
   app.get("/api/stripe/checkout-cancel", async (req: Request, res: Response) => {
-    const devDomain = process.env.REPLIT_DEV_DOMAIN || "";
     const domains = process.env.REPLIT_DOMAINS || "";
-    const primaryDomain = domains.split(",")[0]?.trim() || devDomain;
-    const appPort = "8081";
+    const devDomain = process.env.REPLIT_DEV_DOMAIN || "";
+    const primaryDomain = domains.split(",")[0]?.trim() || "";
 
-    const redirectUrl = devDomain
-      ? `https://${devDomain}:${appPort}/?checkout=cancelled`
-      : `https://${primaryDomain}/?checkout=cancelled`;
+    const redirectUrl = primaryDomain
+      ? `https://${primaryDomain}/?checkout=cancelled`
+      : devDomain
+      ? `https://${devDomain}:8081/?checkout=cancelled`
+      : "/?checkout=cancelled";
 
     res.redirect(redirectUrl);
   });
