@@ -356,15 +356,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customerId = customer.id;
       }
 
-      const prices = await db.execute(
-        rawSql`SELECT id FROM stripe.prices WHERE active = true AND recurring IS NOT NULL ORDER BY unit_amount DESC LIMIT 1`
-      );
-
-      if (!prices.rows.length) {
-        return res.status(400).json({ error: "No subscription price configured yet" });
+      // Query Stripe API directly for the active recurring price
+      const stripeProducts = await stripe.products.search({ query: "name:'TradieCatch Pro' AND active:'true'" });
+      if (!stripeProducts.data.length) {
+        return res.status(400).json({ error: "No subscription product configured yet. Please contact support." });
       }
-
-      const priceId = prices.rows[0].id as string;
+      const product = stripeProducts.data[0];
+      const stripePrices = await stripe.prices.list({ product: product.id, active: true, limit: 10 });
+      const recurringPrice = stripePrices.data.find(p => p.recurring !== null);
+      if (!recurringPrice) {
+        return res.status(400).json({ error: "No subscription price configured yet. Please contact support." });
+      }
+      const priceId = recurringPrice.id;
 
       const domains = process.env.REPLIT_DOMAINS || "";
       const primaryDomain = domains.split(",")[0]?.trim() || "";
