@@ -80,17 +80,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/missed-calls", requireAuth, async (req: AuthRequest, res: Response) => {
-    const { callerName, phoneNumber } = req.body;
-    if (!phoneNumber) {
-      return res.status(400).json({ error: "phoneNumber is required" });
+    try {
+      const { callerName, phoneNumber } = req.body;
+      if (!phoneNumber) {
+        return res.status(400).json({ error: "phoneNumber is required" });
+      }
+      const [call] = await db.insert(missedCalls).values({
+        userId: req.userId!,
+        callerName: callerName || "Unknown Caller",
+        phoneNumber,
+        timestamp: new Date(),
+      }).returning();
+      res.json(call);
+    } catch (err: any) {
+      console.error("Error adding missed call:", err);
+      res.status(500).json({ error: err?.message || "Failed to add call" });
     }
-    const [call] = await db.insert(missedCalls).values({
-      userId: req.userId!,
-      callerName: callerName || "Unknown Caller",
-      phoneNumber,
-      timestamp: new Date(),
-    }).returning();
-    res.json(call);
   });
 
   app.delete("/api/missed-calls/:id", requireAuth, async (req: AuthRequest, res: Response) => {

@@ -777,17 +777,22 @@ async function registerRoutes(app2) {
     res.json(rows);
   });
   app2.post("/api/missed-calls", requireAuth, async (req, res) => {
-    const { callerName, phoneNumber } = req.body;
-    if (!phoneNumber) {
-      return res.status(400).json({ error: "phoneNumber is required" });
+    try {
+      const { callerName, phoneNumber } = req.body;
+      if (!phoneNumber) {
+        return res.status(400).json({ error: "phoneNumber is required" });
+      }
+      const [call] = await db.insert(missedCalls).values({
+        userId: req.userId,
+        callerName: callerName || "Unknown Caller",
+        phoneNumber,
+        timestamp: /* @__PURE__ */ new Date()
+      }).returning();
+      res.json(call);
+    } catch (err) {
+      console.error("Error adding missed call:", err);
+      res.status(500).json({ error: err?.message || "Failed to add call" });
     }
-    const [call] = await db.insert(missedCalls).values({
-      userId: req.userId,
-      callerName: callerName || "Unknown Caller",
-      phoneNumber,
-      timestamp: /* @__PURE__ */ new Date()
-    }).returning();
-    res.json(call);
   });
   app2.delete("/api/missed-calls/:id", requireAuth, async (req, res) => {
     const id = paramId(req);

@@ -27,8 +27,9 @@ export default function AddCallScreen() {
       await addNewCall(callerName.trim() || 'Unknown Caller', phoneNumber.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
-    } catch {
-      Alert.alert('Error', 'Failed to add call. Please try again.');
+    } catch (err: any) {
+      const message = err?.message || 'Failed to add call. Please try again.';
+      Alert.alert('Error', message);
       setSaving(false);
     }
   }, [isValid, addNewCall, callerName, phoneNumber]);
