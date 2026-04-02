@@ -461,28 +461,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      if (!user?.stripeSubscriptionId) {
+      if (!user?.stripeCustomerId) {
         return res.json({ active: false, subscription: null });
       }
 
-      const result = await db.execute(
-        rawSql`SELECT id, status, current_period_end, cancel_at_period_end FROM stripe.subscriptions WHERE id = ${user.stripeSubscriptionId}`
+      // Query Stripe API directly for up-to-date subscription status
+      const stripe = await getUncachableStripeClient();
+      const subscriptions = await stripe.subscriptions.list({
+        customer: user.stripeCustomerId,
+        status: 'all',
+        limit: 5,
+      });
+
+      const activeSub = subscriptions.data.find(
+        s => s.status === 'active' || s.status === 'trialing'
       );
 
-      if (!result.rows.length) {
+      if (!activeSub) {
         return res.json({ active: false, subscription: null });
       }
 
-      const sub = result.rows[0] as any;
-      const active = sub.status === 'active' || sub.status === 'trialing';
+      // Keep local DB in sync
+      if (user.stripeSubscriptionId !== activeSub.id) {
+        await db.update(users)
+          .set({ stripeSubscriptionId: activeSub.id })
+          .where(eq(users.id, userId));
+      }
 
-      res.json({
-        active,
+      return res.json({
+        active: true,
         subscription: {
-          id: sub.id,
-          status: sub.status,
-          currentPeriodEnd: sub.current_period_end,
-          cancelAtPeriodEnd: sub.cancel_at_period_end,
+          id: activeSub.id,
+          status: activeSub.status,
+          currentPeriodEnd: new Date(activeSub.current_period_end * 1000).toISOString(),
+          cancelAtPeriodEnd: activeSub.cancel_at_period_end,
         },
       });
     } catch (err: any) {

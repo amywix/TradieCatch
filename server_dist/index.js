@@ -126,7 +126,6 @@ var pool = new pg.Pool({
 var db = drizzle(pool, { schema: schema_exports });
 
 // server/routes.ts
-import { sql as rawSql } from "drizzle-orm";
 import { eq as eq3, desc as desc2, and as and2 } from "drizzle-orm";
 
 // server/sms-conversation.ts
@@ -1089,24 +1088,31 @@ async function registerRoutes(app2) {
           }
         });
       }
-      if (!user?.stripeSubscriptionId) {
+      if (!user?.stripeCustomerId) {
         return res.json({ active: false, subscription: null });
       }
-      const result = await db.execute(
-        rawSql`SELECT id, status, current_period_end, cancel_at_period_end FROM stripe.subscriptions WHERE id = ${user.stripeSubscriptionId}`
+      const stripe = await getUncachableStripeClient();
+      const subscriptions = await stripe.subscriptions.list({
+        customer: user.stripeCustomerId,
+        status: "all",
+        limit: 5
+      });
+      const activeSub = subscriptions.data.find(
+        (s) => s.status === "active" || s.status === "trialing"
       );
-      if (!result.rows.length) {
+      if (!activeSub) {
         return res.json({ active: false, subscription: null });
       }
-      const sub = result.rows[0];
-      const active = sub.status === "active" || sub.status === "trialing";
-      res.json({
-        active,
+      if (user.stripeSubscriptionId !== activeSub.id) {
+        await db.update(users).set({ stripeSubscriptionId: activeSub.id }).where(eq3(users.id, userId));
+      }
+      return res.json({
+        active: true,
         subscription: {
-          id: sub.id,
-          status: sub.status,
-          currentPeriodEnd: sub.current_period_end,
-          cancelAtPeriodEnd: sub.cancel_at_period_end
+          id: activeSub.id,
+          status: activeSub.status,
+          currentPeriodEnd: new Date(activeSub.current_period_end * 1e3).toISOString(),
+          cancelAtPeriodEnd: activeSub.cancel_at_period_end
         }
       });
     } catch (err) {
