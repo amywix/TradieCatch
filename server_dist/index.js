@@ -96,6 +96,7 @@ var settings = pgTable("settings", {
   twilioAccountSid: text("twilio_account_sid").default(""),
   twilioAuthToken: text("twilio_auth_token").default(""),
   twilioPhoneNumber: text("twilio_phone_number").default(""),
+  missedCallVoiceMessage: text("missed_call_voice_message").default("Sorry we missed your call. We will SMS you now to follow up."),
   services: jsonb("services").$type().default(DEFAULT_SERVICES),
   bookingCalendarEnabled: boolean("booking_calendar_enabled").default(false).notNull(),
   bookingSlots: jsonb("booking_slots").$type().default([
@@ -885,10 +886,11 @@ async function registerRoutes(app2) {
       console.error("Voice webhook error:", err);
     }
     const businessName = settingsRow?.businessName || "us";
+    const voiceMessage = (settingsRow?.missedCallVoiceMessage || "Sorry we missed your call. We will SMS you now to follow up.").trim();
     res.set("Content-Type", "text/xml");
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Sorry we can't take your call right now. We'll send you a text shortly so we can help you out. Thanks for calling ${businessName}.</Say>
+  <Say voice="alice">${voiceMessage} Thanks for calling ${businessName}.</Say>
   <Hangup/>
 </Response>`);
   });

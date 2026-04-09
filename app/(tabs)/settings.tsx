@@ -28,6 +28,7 @@ export default function SettingsScreen() {
   const [webhookCopied, setWebhookCopied] = useState<'sms' | 'voice' | false>(false);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [voiceWebhookUrl, setVoiceWebhookUrl] = useState('');
+  const [voiceMessage, setVoiceMessage] = useState(settings.missedCallVoiceMessage || 'Sorry we missed your call. We will SMS you now to follow up.');
 
   useEffect(() => {
     (async () => {
@@ -57,6 +58,11 @@ export default function SettingsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await updateAppSettings({ bookingCalendarEnabled: value });
   }, [updateAppSettings]);
+
+  const handleSaveVoiceMessage = useCallback(async () => {
+    await updateAppSettings({ missedCallVoiceMessage: voiceMessage.trim() || 'Sorry we missed your call. We will SMS you now to follow up.' });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [updateAppSettings, voiceMessage]);
 
   const bookingSlots = settings.bookingSlots || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
   const [editingSlotIdx, setEditingSlotIdx] = useState<number | null>(null);
@@ -534,6 +540,26 @@ export default function SettingsScreen() {
                 </View>
               </View>
             </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Missed Call Voice Message</Text>
+          <View style={styles.card}>
+            <Text style={styles.settingDescription}>
+              This is the spoken message callers hear when you miss a call.
+            </Text>
+            <TextInput
+              style={[styles.editInput, { marginTop: 12 }]}
+              value={voiceMessage}
+              onChangeText={setVoiceMessage}
+              multiline
+              placeholder="Sorry we missed your call. We will SMS you now to follow up."
+              placeholderTextColor={Colors.textTertiary}
+            />
+            <Pressable style={[styles.upgradeBtn, { marginTop: 12 }]} onPress={handleSaveVoiceMessage}>
+              <Text style={styles.upgradeBtnText}>Save Message</Text>
+            </Pressable>
           </View>
         </View>
 

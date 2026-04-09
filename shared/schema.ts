@@ -84,6 +84,7 @@ export const settings = pgTable("settings", {
   twilioAccountSid: text("twilio_account_sid").default(""),
   twilioAuthToken: text("twilio_auth_token").default(""),
   twilioPhoneNumber: text("twilio_phone_number").default(""),
+  missedCallVoiceMessage: text("missed_call_voice_message").default("Sorry we missed your call. We will SMS you now to follow up."),
   services: jsonb("services").$type<string[]>().default(DEFAULT_SERVICES),
   bookingCalendarEnabled: boolean("booking_calendar_enabled").default(false).notNull(),
   bookingSlots: jsonb("booking_slots").$type<string[]>().default([

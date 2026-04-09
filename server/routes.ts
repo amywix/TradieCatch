@@ -212,11 +212,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     const businessName = settingsRow?.businessName || "us";
+    const voiceMessage = (settingsRow?.missedCallVoiceMessage || "Sorry we missed your call. We will SMS you now to follow up.").trim();
 
     res.set("Content-Type", "text/xml");
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Sorry we can't take your call right now. We'll send you a text shortly so we can help you out. Thanks for calling ${businessName}.</Say>
+  <Say voice="alice">${voiceMessage} Thanks for calling ${businessName}.</Say>
   <Hangup/>
 </Response>`);
   });
