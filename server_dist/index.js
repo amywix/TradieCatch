@@ -97,6 +97,8 @@ var settings = pgTable("settings", {
   twilioAuthToken: text("twilio_auth_token").default(""),
   twilioPhoneNumber: text("twilio_phone_number").default(""),
   missedCallVoiceMessage: text("missed_call_voice_message").default("Sorry we missed your call. We will SMS you now to follow up."),
+  voiceRecordingData: text("voice_recording_data"),
+  voiceRecordingMimeType: text("voice_recording_mime_type"),
   services: jsonb("services").$type().default(DEFAULT_SERVICES),
   bookingCalendarEnabled: boolean("booking_calendar_enabled").default(false).notNull(),
   bookingSlots: jsonb("booking_slots").$type().default([
@@ -887,12 +889,75 @@ async function registerRoutes(app2) {
     }
     const businessName = settingsRow?.businessName || "us";
     const voiceMessage = (settingsRow?.missedCallVoiceMessage || "Sorry we missed your call. We will SMS you now to follow up.").trim();
+    const hasRecording = !!(settingsRow?.voiceRecordingData && settingsRow?.voiceRecordingMimeType);
+    const domains = process.env.REPLIT_DOMAINS || "";
+    const deploymentDomain = process.env.DEPLOYMENT_DOMAIN || domains.split(",").find((d) => d.trim().endsWith(".replit.app"))?.trim() || "";
+    const baseUrl = deploymentDomain ? `https://${deploymentDomain}` : `${req.protocol}://${req.get("host")}`;
+    const recordingUrl = hasRecording && settingsRow?.userId ? `${baseUrl}/api/voice-recording/${settingsRow.userId}` : null;
     res.set("Content-Type", "text/xml");
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+    if (recordingUrl) {
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Play>${recordingUrl}</Play>
+  <Hangup/>
+</Response>`);
+    } else {
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">${voiceMessage} Thanks for calling ${businessName}.</Say>
   <Hangup/>
 </Response>`);
+    }
+  });
+  app2.get("/api/voice-recording/:userId", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const [row] = await db.select({
+        voiceRecordingData: settings.voiceRecordingData,
+        voiceRecordingMimeType: settings.voiceRecordingMimeType
+      }).from(settings).where(eq3(settings.userId, userId));
+      if (!row?.voiceRecordingData) {
+        return res.status(404).json({ error: "No recording found" });
+      }
+      const mimeType = row.voiceRecordingMimeType || "audio/mp4";
+      const audioBuffer = Buffer.from(row.voiceRecordingData, "base64");
+      res.set("Content-Type", mimeType);
+      res.set("Content-Length", audioBuffer.length.toString());
+      res.set("Cache-Control", "no-cache");
+      res.send(audioBuffer);
+    } catch (err) {
+      console.error("Serve voice recording error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+  app2.post("/api/settings/voice-recording", requireAuth, async (req, res) => {
+    try {
+      const { audioBase64, mimeType } = req.body;
+      if (!audioBase64) {
+        return res.status(400).json({ error: "audioBase64 is required" });
+      }
+      const buffer = Buffer.from(audioBase64, "base64");
+      if (buffer.length === 0) {
+        return res.status(400).json({ error: "Invalid audio data" });
+      }
+      const [row] = await db.update(settings).set({
+        voiceRecordingData: audioBase64,
+        voiceRecordingMimeType: mimeType || "audio/mp4"
+      }).where(eq3(settings.userId, req.userId)).returning();
+      res.json({ ok: true, size: buffer.length });
+    } catch (err) {
+      console.error("Upload voice recording error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+  app2.delete("/api/settings/voice-recording", requireAuth, async (req, res) => {
+    try {
+      await db.update(settings).set({ voiceRecordingData: null, voiceRecordingMimeType: null }).where(eq3(settings.userId, req.userId));
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("Delete voice recording error:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
   app2.get("/api/jobs", requireAuth, async (req, res) => {
     const rows = await db.select().from(jobs).where(eq3(jobs.userId, req.userId)).orderBy(desc2(jobs.createdAt));

@@ -213,13 +213,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const businessName = settingsRow?.businessName || "us";
     const voiceMessage = (settingsRow?.missedCallVoiceMessage || "Sorry we missed your call. We will SMS you now to follow up.").trim();
+    const hasRecording = !!(settingsRow?.voiceRecordingData && settingsRow?.voiceRecordingMimeType);
+
+    // Build the public URL for the recording
+    const domains = process.env.REPLIT_DOMAINS || "";
+    const deploymentDomain = process.env.DEPLOYMENT_DOMAIN || domains.split(",").find((d: string) => d.trim().endsWith('.replit.app'))?.trim() || "";
+    const baseUrl = deploymentDomain ? `https://${deploymentDomain}` : `${req.protocol}://${req.get("host")}`;
+    const recordingUrl = hasRecording && settingsRow?.userId ? `${baseUrl}/api/voice-recording/${settingsRow.userId}` : null;
 
     res.set("Content-Type", "text/xml");
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+    if (recordingUrl) {
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Play>${recordingUrl}</Play>
+  <Hangup/>
+</Response>`);
+    } else {
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">${voiceMessage} Thanks for calling ${businessName}.</Say>
   <Hangup/>
 </Response>`);
+    }
+  });
+
+  // Public endpoint: Twilio fetches this to play the tradie's recorded voicemail
+  app.get("/api/voice-recording/:userId", async (req: Request, res: Response) => {
+    try {
+      const userId = req.params.userId as string;
+      const [row] = await db.select({
+        voiceRecordingData: settings.voiceRecordingData,
+        voiceRecordingMimeType: settings.voiceRecordingMimeType,
+      }).from(settings).where(eq(settings.userId, userId));
+
+      if (!row?.voiceRecordingData) {
+        return res.status(404).json({ error: "No recording found" });
+      }
+
+      const mimeType = row.voiceRecordingMimeType || "audio/mp4";
+      const audioBuffer = Buffer.from(row.voiceRecordingData, "base64");
+      res.set("Content-Type", mimeType);
+      res.set("Content-Length", audioBuffer.length.toString());
+      res.set("Cache-Control", "no-cache");
+      res.send(audioBuffer);
+    } catch (err: any) {
+      console.error("Serve voice recording error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Upload voice recording (base64 encoded audio from the app)
+  app.post("/api/settings/voice-recording", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { audioBase64, mimeType } = req.body;
+      if (!audioBase64) {
+        return res.status(400).json({ error: "audioBase64 is required" });
+      }
+      // Validate it's actual base64
+      const buffer = Buffer.from(audioBase64, "base64");
+      if (buffer.length === 0) {
+        return res.status(400).json({ error: "Invalid audio data" });
+      }
+
+      const [row] = await db.update(settings)
+        .set({
+          voiceRecordingData: audioBase64,
+          voiceRecordingMimeType: mimeType || "audio/mp4",
+        })
+        .where(eq(settings.userId, req.userId!))
+        .returning();
+
+      res.json({ ok: true, size: buffer.length });
+    } catch (err: any) {
+      console.error("Upload voice recording error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Delete voice recording
+  app.delete("/api/settings/voice-recording", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      await db.update(settings)
+        .set({ voiceRecordingData: null, voiceRecordingMimeType: null })
+        .where(eq(settings.userId, req.userId!));
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("Delete voice recording error:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.get("/api/jobs", requireAuth, async (req: AuthRequest, res: Response) => {

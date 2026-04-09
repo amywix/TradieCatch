@@ -44,6 +44,9 @@ export interface AppSettings {
   twilioAccountSid: string;
   twilioAuthToken: string;
   twilioPhoneNumber: string;
+  missedCallVoiceMessage?: string;
+  voiceRecordingData?: string | null;
+  voiceRecordingMimeType?: string | null;
   services: string[];
   bookingCalendarEnabled: boolean;
   bookingSlots: string[];

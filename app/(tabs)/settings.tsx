@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput, Switch, Platform,
-  Alert,
+  Alert, ActivityIndicator,
 } from 'react-native';
+import { Audio } from 'expo-av';
 import * as ExpoClipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -30,6 +31,17 @@ export default function SettingsScreen() {
   const [voiceWebhookUrl, setVoiceWebhookUrl] = useState('');
   const [voiceMessage, setVoiceMessage] = useState(settings.missedCallVoiceMessage || 'Sorry we missed your call. We will SMS you now to follow up.');
 
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [activeRecording, setActiveRecording] = useState<Audio.Recording | null>(null);
+  const [recordingUri, setRecordingUri] = useState<string | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackSound, setPlaybackSound] = useState<Audio.Sound | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [hasServerRecording, setHasServerRecording] = useState(false);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
@@ -39,6 +51,162 @@ export default function SettingsScreen() {
         if (data.voiceWebhookUrl) setVoiceWebhookUrl(data.voiceWebhookUrl);
       } catch (e) {}
     })();
+  }, []);
+
+  // Sync server recording state from settings
+  useEffect(() => {
+    setHasServerRecording(!!(settings.voiceRecordingData));
+  }, [settings.voiceRecordingData]);
+
+  // Clean up audio resources on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (activeRecording) activeRecording.stopAndUnloadAsync().catch(() => {});
+      if (playbackSound) playbackSound.unloadAsync().catch(() => {});
+    };
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        const { status } = await Audio.requestPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Needed', 'Please allow microphone access to record a voicemail greeting.');
+          return;
+        }
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      }
+      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setActiveRecording(recording);
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    } catch (err) {
+      Alert.alert('Error', 'Could not start recording. Please check microphone permissions.');
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    if (!activeRecording) return;
+    if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null; }
+    try {
+      await activeRecording.stopAndUnloadAsync();
+      if (Platform.OS !== 'web') await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      const uri = activeRecording.getURI();
+      setRecordingUri(uri);
+      setActiveRecording(null);
+      setIsRecording(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      Alert.alert('Error', 'Could not finish recording.');
+      setIsRecording(false);
+      setActiveRecording(null);
+    }
+  }, [activeRecording]);
+
+  const togglePlayback = useCallback(async () => {
+    if (!recordingUri) return;
+    if (isPlaying && playbackSound) {
+      await playbackSound.pauseAsync();
+      setIsPlaying(false);
+      return;
+    }
+    if (playbackSound) {
+      await playbackSound.playFromPositionAsync(0);
+      setIsPlaying(true);
+      return;
+    }
+    try {
+      if (Platform.OS !== 'web') await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      const { sound } = await Audio.Sound.createAsync({ uri: recordingUri }, { shouldPlay: true });
+      setPlaybackSound(sound);
+      setIsPlaying(true);
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) setIsPlaying(false);
+      });
+    } catch (err) {
+      Alert.alert('Error', 'Could not play recording.');
+    }
+  }, [recordingUri, isPlaying, playbackSound]);
+
+  const discardLocalRecording = useCallback(async () => {
+    if (playbackSound) { await playbackSound.unloadAsync().catch(() => {}); setPlaybackSound(null); }
+    setRecordingUri(null);
+    setIsPlaying(false);
+    setRecordingSeconds(0);
+  }, [playbackSound]);
+
+  const uploadRecording = useCallback(async () => {
+    if (!recordingUri) return;
+    setIsUploading(true);
+    try {
+      const response = await fetch(recordingUri);
+      const blob = await response.blob();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => { const b64 = (reader.result as string).split(',')[1]; resolve(b64); };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const mimeType = blob.type || 'audio/m4a';
+      const res = await apiRequest('POST', '/api/settings/voice-recording', { audioBase64: base64, mimeType });
+      if (!res.ok) throw new Error('Upload failed');
+      setHasServerRecording(true);
+      if (playbackSound) { await playbackSound.unloadAsync().catch(() => {}); setPlaybackSound(null); }
+      setRecordingUri(null);
+      setIsPlaying(false);
+      setRecordingSeconds(0);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      Alert.alert('Error', 'Could not save recording. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [recordingUri, playbackSound]);
+
+  const deleteServerRecording = useCallback(async () => {
+    Alert.alert(
+      'Delete Recording',
+      'Remove your voicemail recording? Callers will hear the default text message instead.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiRequest('DELETE', '/api/settings/voice-recording');
+              setHasServerRecording(false);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (err) {
+              Alert.alert('Error', 'Could not delete recording.');
+            }
+          },
+        },
+      ]
+    );
+  }, []);
+
+  const reRecordVoicemail = useCallback(async () => {
+    Alert.alert(
+      'Re-record',
+      'Delete the current recording and record a new one?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Re-record', style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiRequest('DELETE', '/api/settings/voice-recording');
+              setHasServerRecording(false);
+            } catch (err) {
+              Alert.alert('Error', 'Could not delete recording.');
+            }
+          },
+        },
+      ]
+    );
   }, []);
 
   const services = settings.services || [];
@@ -544,22 +712,101 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Missed Call Voice Message</Text>
+          <Text style={styles.sectionTitle}>Voicemail Greeting</Text>
           <View style={styles.card}>
             <Text style={styles.settingDescription}>
-              This is the spoken message callers hear when you miss a call.
+              Record your own voice message for callers to hear when you miss their call.
             </Text>
-            <TextInput
-              style={[styles.editInput, { marginTop: 12 }]}
-              value={voiceMessage}
-              onChangeText={setVoiceMessage}
-              multiline
-              placeholder="Sorry we missed your call. We will SMS you now to follow up."
-              placeholderTextColor={Colors.textTertiary}
-            />
-            <Pressable style={[styles.upgradeBtn, { marginTop: 12 }]} onPress={handleSaveVoiceMessage}>
-              <Text style={styles.upgradeBtnText}>Save Message</Text>
-            </Pressable>
+
+            {/* Status row */}
+            <View style={styles.recordingStatusRow}>
+              <View style={[styles.recordingDot, {
+                backgroundColor: hasServerRecording ? Colors.success : recordingUri ? '#F59E0B' : Colors.textTertiary,
+              }]} />
+              <Text style={styles.recordingStatusText}>
+                {hasServerRecording
+                  ? 'Custom recording active'
+                  : recordingUri
+                  ? 'Recording ready — tap Save to activate'
+                  : isRecording
+                  ? 'Recording…'
+                  : 'Using default text message'}
+              </Text>
+            </View>
+
+            {/* Timer while recording */}
+            {isRecording && (
+              <Text style={styles.recordingTimer}>
+                {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
+              </Text>
+            )}
+
+            {/* Record button (shown when no local or server recording) */}
+            {Platform.OS !== 'web' && !recordingUri && !hasServerRecording && (
+              <Pressable
+                style={[styles.recordButton, isRecording && styles.recordButtonActive]}
+                onPress={isRecording ? stopRecording : startRecording}
+              >
+                <Ionicons name={isRecording ? 'stop' : 'mic'} size={28} color={Colors.white} />
+                <Text style={styles.recordButtonText}>{isRecording ? 'Stop' : 'Record'}</Text>
+              </Pressable>
+            )}
+
+            {/* Local recording controls (recorded but not yet saved) */}
+            {recordingUri && !hasServerRecording && (
+              <View style={styles.recordingControls}>
+                <Pressable style={styles.recordingPlayBtn} onPress={togglePlayback}>
+                  <Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color={Colors.accent} />
+                  <Text style={styles.recordingPlayBtnText}>{isPlaying ? 'Pause' : 'Preview'}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.recordingSaveBtn, isUploading && { opacity: 0.6 }]}
+                  onPress={uploadRecording}
+                  disabled={isUploading}
+                >
+                  {isUploading
+                    ? <ActivityIndicator color={Colors.white} size="small" />
+                    : <Ionicons name="cloud-upload-outline" size={18} color={Colors.white} />}
+                  <Text style={styles.recordingSaveBtnText}>{isUploading ? 'Saving…' : 'Save'}</Text>
+                </Pressable>
+                <Pressable style={styles.recordingDiscardBtn} onPress={discardLocalRecording}>
+                  <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+                </Pressable>
+              </View>
+            )}
+
+            {/* Server recording controls (recording already saved) */}
+            {hasServerRecording && (
+              <View style={styles.recordingControls}>
+                <Pressable style={styles.recordingPlayBtn} onPress={reRecordVoicemail}>
+                  <Ionicons name="mic-outline" size={18} color={Colors.accent} />
+                  <Text style={styles.recordingPlayBtnText}>Re-record</Text>
+                </Pressable>
+                <Pressable style={styles.recordingDiscardBtn} onPress={deleteServerRecording}>
+                  <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+                </Pressable>
+              </View>
+            )}
+
+            {/* Web fallback */}
+            {Platform.OS === 'web' && !hasServerRecording && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={[styles.settingDescription, { marginBottom: 8 }]}>
+                  Voice recording is available in the mobile app. On web, set a text message:
+                </Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={voiceMessage}
+                  onChangeText={setVoiceMessage}
+                  multiline
+                  placeholder="Sorry we missed your call. We will SMS you now to follow up."
+                  placeholderTextColor={Colors.textTertiary}
+                />
+                <Pressable style={[styles.upgradeBtn, { marginTop: 10 }]} onPress={handleSaveVoiceMessage}>
+                  <Text style={styles.upgradeBtnText}>Save Message</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         </View>
 
@@ -1329,5 +1576,95 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
     color: Colors.danger,
+  },
+  recordingStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  recordingStatusText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  recordingTimer: {
+    fontSize: 36,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.danger,
+    textAlign: 'center',
+    marginVertical: 8,
+    letterSpacing: 2,
+  },
+  recordButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 14,
+  },
+  recordButtonActive: {
+    backgroundColor: Colors.danger,
+  },
+  recordButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.white,
+  },
+  recordingControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+  },
+  recordingPlayBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: Colors.accent,
+    borderRadius: 12,
+    paddingVertical: 10,
+  },
+  recordingPlayBtnText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.accent,
+  },
+  recordingSaveBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: Colors.accent,
+    borderRadius: 12,
+    paddingVertical: 10,
+  },
+  recordingSaveBtnText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.white,
+  },
+  recordingDiscardBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

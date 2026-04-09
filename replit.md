@@ -69,6 +69,16 @@ Preferred communication style: Simple, everyday language.
 - **Validation**: Uses `drizzle-zod` for schema-to-Zod validation
 - **Seeding**: Default templates and settings are created per-user during registration
 
+### Voice Recording Feature
+- Tradies can record their own voicemail greeting via the Settings screen ("Voicemail Greeting" section)
+- Recording is done on-device using `expo-av` (Audio.Recording)
+- After recording, the user can preview it and save it — the audio is base64-encoded and uploaded to `POST /api/settings/voice-recording`
+- Stored as base64 text in `settings.voiceRecordingData` column (`voiceRecordingMimeType` stores the MIME type)
+- Public endpoint `GET /api/voice-recording/:userId` decodes and serves the audio file so Twilio can fetch it
+- Twilio voice webhook at `POST /api/twilio/voice` checks for a recording; if found, uses `<Play>` TwiML; otherwise falls back to `<Say>` with the text message
+- Users can delete the recording and revert to the text-based message
+- Web platform shows a text-message fallback (recording only available in the mobile app)
+
 ### SMS Conversation Engine (`server/sms-conversation.ts`)
 - Implements a state machine for automated SMS conversations with callers
 - States: none → awaiting_name → awaiting_service → awaiting_sub_option → awaiting_urgency → awaiting_other_description → awaiting_address → awaiting_email → awaiting_booking_date → awaiting_booking_slot → awaiting_time → completed
