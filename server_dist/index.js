@@ -1474,7 +1474,7 @@ async function initStripe() {
   configureExpoAndLanding(app);
   const server = await registerRoutes(app);
   setupErrorHandler(app);
-  const port = parseInt(process.env.PORT || "5000", 10);
+  const port = parseInt(process.env.PORT || process.env.CLOUD_RUN_PORT || "5000", 10);
   server.listen(
     {
       port,

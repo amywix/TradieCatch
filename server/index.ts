@@ -399,7 +399,7 @@ async function initStripe() {
 
   setupErrorHandler(app);
 
-  const port = parseInt(process.env.PORT || "5000", 10);
+  const port = parseInt(process.env.PORT || process.env.CLOUD_RUN_PORT || "5000", 10);
   server.listen(
     {
       port,
