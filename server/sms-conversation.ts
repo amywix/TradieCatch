@@ -111,46 +111,56 @@ export async function sendInitialMissedCallSms(callId: string, userId: string): 
   }).where(eq(missedCalls.id, callId));
 }
 
-async function findUserByTwilioNumber(toPhone: string): Promise<string | null> {
+async function findUsersByTwilioNumber(toPhone: string): Promise<string[]> {
   const allSettings = await db.select().from(settings);
+  const userIds: string[] = [];
   for (const s of allSettings) {
     const twilioNum = s.twilioPhoneNumber || "";
     if (twilioNum && phonesMatch(twilioNum, toPhone)) {
-      return s.userId;
+      userIds.push(s.userId);
     }
   }
-  return null;
+  return userIds;
 }
 
 export async function handleIncomingReply(fromPhone: string, body: string, toPhone: string): Promise<string | null> {
   const normalizedPhone = normalizePhone(fromPhone);
 
-  let userId: string | null = null;
-
+  // Find all users whose Twilio number matches the destination phone
+  let userIds: string[] = [];
   if (toPhone) {
-    userId = await findUserByTwilioNumber(toPhone);
+    userIds = await findUsersByTwilioNumber(toPhone);
   }
 
-  let rows;
-  if (userId) {
-    rows = await db.select().from(missedCalls)
-      .where(and(eq(missedCalls.userId, userId), eq(missedCalls.phoneNumber, normalizedPhone)))
-      .orderBy(desc(missedCalls.timestamp));
+  let rows: any[] = [];
 
-    if (rows.length === 0) {
-      const allCalls = await db.select().from(missedCalls).where(eq(missedCalls.userId, userId));
-      rows = allCalls.filter(c => phonesMatch(c.phoneNumber, normalizedPhone));
+  if (userIds.length > 0) {
+    // Search for active conversations across ALL matching users
+    for (const uid of userIds) {
+      const userRows = await db.select().from(missedCalls)
+        .where(and(eq(missedCalls.userId, uid), eq(missedCalls.phoneNumber, normalizedPhone)))
+        .orderBy(desc(missedCalls.timestamp));
+      rows = rows.concat(userRows);
     }
-  } else {
-    rows = await db.select().from(missedCalls)
-      .where(eq(missedCalls.phoneNumber, normalizedPhone))
-      .orderBy(desc(missedCalls.timestamp));
 
+    // Fallback: phone number normalisation difference — try broader match
     if (rows.length === 0) {
-      const allCalls = await db.select().from(missedCalls);
-      rows = allCalls.filter(c => phonesMatch(c.phoneNumber, normalizedPhone));
+      for (const uid of userIds) {
+        const allCalls = await db.select().from(missedCalls).where(eq(missedCalls.userId, uid));
+        const matched = allCalls.filter(c => phonesMatch(c.phoneNumber, normalizedPhone));
+        rows = rows.concat(matched);
+      }
     }
   }
+
+  // Last resort: search all calls by phone number regardless of user
+  if (rows.length === 0) {
+    const allCalls = await db.select().from(missedCalls);
+    rows = allCalls.filter(c => phonesMatch(c.phoneNumber, normalizedPhone));
+  }
+
+  // Sort by timestamp descending
+  rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   const activeCalls = rows.filter(c => c.conversationState !== "none" && c.conversationState !== "completed");
   let call = activeCalls.length > 0 ? activeCalls[0] : null;
