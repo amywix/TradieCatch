@@ -276,15 +276,23 @@ export default function SettingsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [services]);
 
+  const [servicesSaved, setServicesSaved] = useState(false);
+
   const handleSaveServiceEdit = useCallback(async () => {
     if (editingServiceIdx === null) return;
     const trimmed = editingServiceText.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setEditingServiceIdx(null);
+      setEditingServiceText('');
+      return;
+    }
     const updated = [...services];
     updated[editingServiceIdx] = trimmed;
-    await updateServices(updated);
     setEditingServiceIdx(null);
     setEditingServiceText('');
+    await updateServices(updated);
+    setServicesSaved(true);
+    setTimeout(() => setServicesSaved(false), 2500);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [editingServiceIdx, editingServiceText, services, updateServices]);
 
@@ -313,11 +321,13 @@ export default function SettingsScreen() {
 
   const handleAddService = useCallback(async () => {
     const trimmed = newServiceText.trim();
-    if (!trimmed) return;
+    if (!trimmed) { setAddingService(false); return; }
     const updated = [...services, trimmed];
-    await updateServices(updated);
     setNewServiceText('');
     setAddingService(false);
+    await updateServices(updated);
+    setServicesSaved(true);
+    setTimeout(() => setServicesSaved(false), 2500);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [newServiceText, services, updateServices]);
 
@@ -511,6 +521,12 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Services Offered</Text>
+            {servicesSaved && (
+              <View style={styles.savedBadge}>
+                <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
+                <Text style={styles.savedBadgeText}>Saved</Text>
+              </View>
+            )}
             <Pressable
               style={styles.addButton}
               onPress={() => { setAddingService(true); setNewServiceText(''); }}
@@ -520,7 +536,7 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
           <Text style={styles.sectionHint}>
-            These are the services shown to customers when they reply to your SMS. Tap to edit, swipe to remove.
+            These options are sent to customers via SMS when they reply to your missed call. Tap any service to rename it.
           </Text>
           <View style={styles.card}>
             {services.map((service, idx) => (
@@ -537,14 +553,13 @@ export default function SettingsScreen() {
                       onChangeText={setEditingServiceText}
                       autoFocus
                       onSubmitEditing={handleSaveServiceEdit}
+                      onBlur={handleSaveServiceEdit}
                       placeholder="Service name"
                       placeholderTextColor={Colors.textTertiary}
+                      returnKeyType="done"
                     />
                     <Pressable onPress={handleSaveServiceEdit} hitSlop={8}>
                       <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
-                    </Pressable>
-                    <Pressable onPress={() => { setEditingServiceIdx(null); setEditingServiceText(''); }} hitSlop={8}>
-                      <Ionicons name="close-circle" size={22} color={Colors.textTertiary} />
                     </Pressable>
                   </View>
                 ) : (
@@ -591,14 +606,13 @@ export default function SettingsScreen() {
                     onChangeText={setNewServiceText}
                     autoFocus
                     onSubmitEditing={handleAddService}
+                    onBlur={handleAddService}
                     placeholder="New service name"
                     placeholderTextColor={Colors.textTertiary}
+                    returnKeyType="done"
                   />
                   <Pressable onPress={handleAddService} hitSlop={8}>
                     <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
-                  </Pressable>
-                  <Pressable onPress={() => { setAddingService(false); setNewServiceText(''); }} hitSlop={8}>
-                    <Ionicons name="close-circle" size={22} color={Colors.textTertiary} />
                   </Pressable>
                 </View>
               </>
@@ -1576,6 +1590,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
     color: Colors.danger,
+  },
+  savedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.success + '18',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginRight: 4,
+  },
+  savedBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.success,
   },
   recordingStatusRow: {
     flexDirection: 'row',
