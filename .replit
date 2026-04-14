@@ -7,7 +7,7 @@ channel = "stable-24_05"
 [deployment]
 deploymentTarget = "autoscale"
 build = ["sh", "-c", "npm run db:push && EXPO_PUBLIC_DEPLOYMENT_DOMAIN=tradiecatch.replit.app npx expo export --platform web --output-dir web-build && npm run expo:static:build && npm run server:build"]
-run = ["npm", "run", "server:prod"]
+run = ["bash", "-c", "PORT=8081 npm run server:prod"]
 
 [[ports]]
 localPort = 5000
