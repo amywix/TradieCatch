@@ -162,21 +162,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const allSettings = await db.select().from(settings);
-      const configuredNumbers = allSettings.map(s => s.twilioPhoneNumber || "(empty)");
+      const configuredNumbers = allSettings.filter(s => s.twilioPhoneNumber).map(s => s.twilioPhoneNumber);
       console.log(`Looking for Twilio number ${to} among configured numbers: ${JSON.stringify(configuredNumbers)}`);
-      settingsRow = allSettings.find(s => {
+
+      // Collect ALL users whose Twilio number matches — pick the one with the
+      // most recent missed call from this caller (most active account), else first found.
+      const matchingSettings = allSettings.filter(s => {
         const twilioNum = s.twilioPhoneNumber || "";
-        return phonesMatchSimple(twilioNum, to);
+        return twilioNum && phonesMatchSimple(twilioNum, to);
       });
 
-      if (!settingsRow) {
+      if (matchingSettings.length === 0) {
         console.log(`No user found for Twilio number: ${to}`);
         res.set("Content-Type", "text/xml");
         res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice">Sorry, this number is not configured.</Say><Hangup/></Response>`);
         return;
       }
 
+      if (matchingSettings.length === 1) {
+        settingsRow = matchingSettings[0];
+      } else {
+        // Multiple users share this number — prefer the one with the most recent missed call
+        const recentCalls = await db.select().from(missedCalls)
+          .where(eq(missedCalls.phoneNumber, from))
+          .orderBy(desc(missedCalls.timestamp))
+          .limit(1);
+        if (recentCalls.length > 0) {
+          const match = matchingSettings.find(s => s.userId === recentCalls[0].userId);
+          settingsRow = match || matchingSettings[0];
+        } else {
+          settingsRow = matchingSettings[0];
+        }
+      }
+
       userId = settingsRow.userId as string;
+      console.log(`Resolved to user ${userId} for Twilio number ${to}`);
 
       const existingCalls = await db.select().from(missedCalls)
         .where(and(eq(missedCalls.userId, userId!), eq(missedCalls.phoneNumber, from)))

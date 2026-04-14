@@ -230,36 +230,42 @@ Can we grab your name to get started?`;
     conversationLog: log2
   }).where(eq(missedCalls.id, callId));
 }
-async function findUserByTwilioNumber(toPhone) {
+async function findUsersByTwilioNumber(toPhone) {
   const allSettings = await db.select().from(settings);
+  const userIds = [];
   for (const s of allSettings) {
     const twilioNum = s.twilioPhoneNumber || "";
     if (twilioNum && phonesMatch(twilioNum, toPhone)) {
-      return s.userId;
+      userIds.push(s.userId);
     }
   }
-  return null;
+  return userIds;
 }
 async function handleIncomingReply(fromPhone, body, toPhone) {
   const normalizedPhone = normalizePhone(fromPhone);
-  let userId = null;
+  let userIds = [];
   if (toPhone) {
-    userId = await findUserByTwilioNumber(toPhone);
+    userIds = await findUsersByTwilioNumber(toPhone);
   }
-  let rows;
-  if (userId) {
-    rows = await db.select().from(missedCalls).where(and(eq(missedCalls.userId, userId), eq(missedCalls.phoneNumber, normalizedPhone))).orderBy(desc(missedCalls.timestamp));
-    if (rows.length === 0) {
-      const allCalls = await db.select().from(missedCalls).where(eq(missedCalls.userId, userId));
-      rows = allCalls.filter((c) => phonesMatch(c.phoneNumber, normalizedPhone));
+  let rows = [];
+  if (userIds.length > 0) {
+    for (const uid of userIds) {
+      const userRows = await db.select().from(missedCalls).where(and(eq(missedCalls.userId, uid), eq(missedCalls.phoneNumber, normalizedPhone))).orderBy(desc(missedCalls.timestamp));
+      rows = rows.concat(userRows);
     }
-  } else {
-    rows = await db.select().from(missedCalls).where(eq(missedCalls.phoneNumber, normalizedPhone)).orderBy(desc(missedCalls.timestamp));
     if (rows.length === 0) {
-      const allCalls = await db.select().from(missedCalls);
-      rows = allCalls.filter((c) => phonesMatch(c.phoneNumber, normalizedPhone));
+      for (const uid of userIds) {
+        const allCalls = await db.select().from(missedCalls).where(eq(missedCalls.userId, uid));
+        const matched = allCalls.filter((c) => phonesMatch(c.phoneNumber, normalizedPhone));
+        rows = rows.concat(matched);
+      }
     }
   }
+  if (rows.length === 0) {
+    const allCalls = await db.select().from(missedCalls);
+    rows = allCalls.filter((c) => phonesMatch(c.phoneNumber, normalizedPhone));
+  }
+  rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const activeCalls = rows.filter((c) => c.conversationState !== "none" && c.conversationState !== "completed");
   let call = activeCalls.length > 0 ? activeCalls[0] : null;
   if (!call) {
@@ -849,19 +855,31 @@ async function registerRoutes(app2) {
     let settingsRow = null;
     try {
       const allSettings = await db.select().from(settings);
-      const configuredNumbers = allSettings.map((s) => s.twilioPhoneNumber || "(empty)");
+      const configuredNumbers = allSettings.filter((s) => s.twilioPhoneNumber).map((s) => s.twilioPhoneNumber);
       console.log(`Looking for Twilio number ${to} among configured numbers: ${JSON.stringify(configuredNumbers)}`);
-      settingsRow = allSettings.find((s) => {
+      const matchingSettings = allSettings.filter((s) => {
         const twilioNum = s.twilioPhoneNumber || "";
-        return phonesMatchSimple(twilioNum, to);
+        return twilioNum && phonesMatchSimple(twilioNum, to);
       });
-      if (!settingsRow) {
+      if (matchingSettings.length === 0) {
         console.log(`No user found for Twilio number: ${to}`);
         res.set("Content-Type", "text/xml");
         res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice">Sorry, this number is not configured.</Say><Hangup/></Response>`);
         return;
       }
+      if (matchingSettings.length === 1) {
+        settingsRow = matchingSettings[0];
+      } else {
+        const recentCalls = await db.select().from(missedCalls).where(eq3(missedCalls.phoneNumber, from)).orderBy(desc2(missedCalls.timestamp)).limit(1);
+        if (recentCalls.length > 0) {
+          const match = matchingSettings.find((s) => s.userId === recentCalls[0].userId);
+          settingsRow = match || matchingSettings[0];
+        } else {
+          settingsRow = matchingSettings[0];
+        }
+      }
       userId = settingsRow.userId;
+      console.log(`Resolved to user ${userId} for Twilio number ${to}`);
       const existingCalls = await db.select().from(missedCalls).where(and2(eq3(missedCalls.userId, userId), eq3(missedCalls.phoneNumber, from))).orderBy(desc2(missedCalls.timestamp)).limit(1);
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1e3);
       const isDuplicate = existingCalls.length > 0 && new Date(existingCalls[0].timestamp) > fiveMinAgo;
@@ -911,7 +929,7 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/voice-recording/:userId", async (req, res) => {
     try {
-      const { userId } = req.params;
+      const userId = req.params.userId;
       const [row] = await db.select({
         voiceRecordingData: settings.voiceRecordingData,
         voiceRecordingMimeType: settings.voiceRecordingMimeType
