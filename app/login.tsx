@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, Pressable, TextInput, Platform, Alert,
-  ActivityIndicator, KeyboardAvoidingView, ScrollView, Linking,
+  ActivityIndicator, KeyboardAvoidingView, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 
-type Screen = 'landing' | 'twilio-choice' | 'register' | 'login';
+type Screen = 'landing' | 'register' | 'login';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -71,8 +71,7 @@ export default function LoginScreen() {
 
   const goBack = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (screen === 'twilio-choice') setScreen('landing');
-    else if (screen === 'register') setScreen('twilio-choice');
+    if (screen === 'register') setScreen('landing');
     else if (screen === 'login') setScreen('landing');
   };
 
@@ -103,7 +102,7 @@ export default function LoginScreen() {
             style={styles.trialBtn}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              setScreen('twilio-choice');
+              setScreen('register');
             }}
             testID="trial-btn"
           >
@@ -121,67 +120,6 @@ export default function LoginScreen() {
           >
             <Text style={styles.loginBtnText}>Already have an account? Sign In</Text>
           </Pressable>
-        </Animated.View>
-      </View>
-    );
-  }
-
-  if (screen === 'twilio-choice') {
-    return (
-      <View style={[styles.choiceScreen, { paddingTop: topInset + 16, paddingBottom: bottomInset + 20 }]}>
-        <Pressable onPress={goBack} style={styles.backBtn} hitSlop={12}>
-          <Ionicons name="arrow-back" size={24} color={Colors.text} />
-        </Pressable>
-
-        <Animated.View entering={FadeIn.duration(400)} style={styles.choiceContent}>
-          <View style={styles.choiceIconBg}>
-            <Ionicons name="call-outline" size={40} color={Colors.accent} />
-          </View>
-
-          <Text style={styles.choiceTitle}>You'll need a Twilio number</Text>
-          <Text style={styles.choiceSubtitle}>
-            Twilio handles the SMS conversations with your customers. It takes about 5 minutes to set up.
-          </Text>
-
-          <View style={styles.choiceCards}>
-            <Pressable
-              style={styles.choiceCard}
-              onPress={() => Linking.openURL('https://www.twilio.com/try-twilio')}
-            >
-              <View style={[styles.choiceCardIcon, { backgroundColor: '#FFF0E8' }]}>
-                <Ionicons name="person-add-outline" size={28} color={Colors.accent} />
-              </View>
-              <View style={styles.choiceCardBody}>
-                <Text style={styles.choiceCardTitle}>New to Twilio?</Text>
-                <Text style={styles.choiceCardDesc}>Sign up free — takes 5 minutes. A trial phone number is included.</Text>
-              </View>
-              <Ionicons name="open-outline" size={18} color={Colors.textTertiary} />
-            </Pressable>
-
-            <Pressable
-              style={[styles.choiceCard, styles.choiceCardHighlight]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                setScreen('register');
-              }}
-            >
-              <View style={[styles.choiceCardIcon, { backgroundColor: '#E8F8ED' }]}>
-                <Ionicons name="checkmark-circle-outline" size={28} color={Colors.success} />
-              </View>
-              <View style={styles.choiceCardBody}>
-                <Text style={styles.choiceCardTitle}>I have a Twilio account</Text>
-                <Text style={styles.choiceCardDesc}>Create your TradieCatch account and enter your Twilio details.</Text>
-              </View>
-              <Ionicons name="arrow-forward" size={18} color={Colors.success} />
-            </Pressable>
-          </View>
-
-          <View style={styles.twilioNote}>
-            <Ionicons name="information-circle-outline" size={16} color={Colors.textTertiary} />
-            <Text style={styles.twilioNoteText}>
-              Australian Twilio numbers cost ~$1.15 USD/month plus usage fees. Free trial credit is available.
-            </Text>
-          </View>
         </Animated.View>
       </View>
     );
@@ -430,99 +368,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: 'rgba(255,255,255,0.7)',
   },
-  choiceScreen: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    paddingHorizontal: 24,
-  },
   backBtn: {
     alignSelf: 'flex-start',
     marginBottom: 16,
-  },
-  choiceContent: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  choiceIconBg: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FFF0E8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    marginTop: 8,
-  },
-  choiceTitle: {
-    fontSize: 26,
-    fontFamily: 'Inter_700Bold',
-    color: Colors.text,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  choiceSubtitle: {
-    fontSize: 15,
-    fontFamily: 'Inter_400Regular',
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 8,
-    marginBottom: 28,
-  },
-  choiceCards: {
-    width: '100%',
-    gap: 14,
-  },
-  choiceCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  choiceCardHighlight: {
-    borderColor: Colors.success,
-    backgroundColor: '#F5FFF9',
-  },
-  choiceCardIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  choiceCardBody: {
-    flex: 1,
-  },
-  choiceCardTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
-    color: Colors.text,
-    marginBottom: 3,
-  },
-  choiceCardDesc: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: Colors.textSecondary,
-    lineHeight: 18,
-  },
-  twilioNote: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 24,
-    alignItems: 'flex-start',
-    paddingHorizontal: 4,
-  },
-  twilioNoteText: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: Colors.textTertiary,
-    lineHeight: 18,
   },
   formScreen: {
     flex: 1,

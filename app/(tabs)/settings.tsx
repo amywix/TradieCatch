@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput, Switch, Platform,
-  Alert, ActivityIndicator,
+  Alert, ActivityIndicator, Modal, KeyboardAvoidingView,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import * as ExpoClipboard from 'expo-clipboard';
@@ -231,6 +231,40 @@ export default function SettingsScreen() {
     await updateAppSettings({ missedCallVoiceMessage: voiceMessage.trim() || 'Sorry we missed your call. We will SMS you now to follow up.' });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [updateAppSettings, voiceMessage]);
+
+  const [showTwilioModal, setShowTwilioModal] = useState(false);
+  const [twilioSid, setTwilioSid] = useState(settings.twilioAccountSid || '');
+  const [twilioToken, setTwilioToken] = useState(settings.twilioAuthToken || '');
+  const [twilioPhone, setTwilioPhone] = useState(settings.twilioPhoneNumber || '');
+  const [twilioSaving, setTwilioSaving] = useState(false);
+
+  const openTwilioModal = useCallback(() => {
+    setTwilioSid(settings.twilioAccountSid || '');
+    setTwilioToken(settings.twilioAuthToken || '');
+    setTwilioPhone(settings.twilioPhoneNumber || '');
+    setShowTwilioModal(true);
+  }, [settings.twilioAccountSid, settings.twilioAuthToken, settings.twilioPhoneNumber]);
+
+  const handleSaveTwilio = useCallback(async () => {
+    if (!twilioSid.trim() || !twilioToken.trim() || !twilioPhone.trim()) {
+      Alert.alert('Missing Details', 'Please enter your Account SID, Auth Token, and phone number.');
+      return;
+    }
+    setTwilioSaving(true);
+    try {
+      await updateAppSettings({
+        twilioAccountSid: twilioSid.trim(),
+        twilioAuthToken: twilioToken.trim(),
+        twilioPhoneNumber: twilioPhone.trim(),
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowTwilioModal(false);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Could not save Twilio details.');
+    } finally {
+      setTwilioSaving(false);
+    }
+  }, [twilioSid, twilioToken, twilioPhone, updateAppSettings]);
 
   const bookingSlots = settings.bookingSlots || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
   const [editingSlotIdx, setEditingSlotIdx] = useState<number | null>(null);
@@ -621,88 +655,6 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Get a Twilio Number</Text>
-          <View style={styles.card}>
-            <View style={styles.webhookIntro}>
-              <Ionicons name="phone-portrait-outline" size={20} color={Colors.accent} />
-              <Text style={styles.webhookIntroText}>
-                Twilio provides the phone number that receives your diverted calls and sends automated SMS replies. Follow these steps to get set up:
-              </Text>
-            </View>
-
-            <View style={styles.webhookStepsDivider} />
-
-            <View style={styles.webhookStep}>
-              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
-                <Text style={styles.webhookStepNumText}>1</Text>
-              </View>
-              <View style={styles.webhookStepContent}>
-                <Text style={styles.webhookStepTitle}>Create a Twilio account</Text>
-                <Text style={styles.webhookStepDesc}>
-                  Go to twilio.com and sign up for a free account. You'll get a free trial with credit to test.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.webhookStepConnector} />
-
-            <View style={styles.webhookStep}>
-              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
-                <Text style={styles.webhookStepNumText}>2</Text>
-              </View>
-              <View style={styles.webhookStepContent}>
-                <Text style={styles.webhookStepTitle}>Verify your number</Text>
-                <Text style={styles.webhookStepDesc}>
-                  Twilio will ask you to verify your mobile number. Enter the code they send you.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.webhookStepConnector} />
-
-            <View style={styles.webhookStep}>
-              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
-                <Text style={styles.webhookStepNumText}>3</Text>
-              </View>
-              <View style={styles.webhookStepContent}>
-                <Text style={styles.webhookStepTitle}>Get a phone number</Text>
-                <Text style={styles.webhookStepDesc}>
-                  In your Twilio console, go to Phone Numbers {'>'} Manage {'>'} Buy a Number. Search for an Australian number (prefix +61). Select one and purchase it (~$1.50 USD/month).
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.webhookStepConnector} />
-
-            <View style={styles.webhookStep}>
-              <View style={[styles.webhookStepNum, { backgroundColor: Colors.accent }]}>
-                <Text style={styles.webhookStepNumText}>4</Text>
-              </View>
-              <View style={styles.webhookStepContent}>
-                <Text style={styles.webhookStepTitle}>Copy your credentials</Text>
-                <Text style={styles.webhookStepDesc}>
-                  From your Twilio dashboard (twilio.com/console), copy your Account SID, Auth Token, and the phone number you just bought.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.webhookStepConnector} />
-
-            <View style={styles.webhookStep}>
-              <View style={[styles.webhookStepNum, { backgroundColor: Colors.success }]}>
-                <Ionicons name="checkmark" size={14} color={Colors.white} />
-              </View>
-              <View style={styles.webhookStepContent}>
-                <Text style={styles.webhookStepTitle}>Enter them in Twilio Credentials below</Text>
-                <Text style={styles.webhookStepDesc}>
-                  Paste your Account SID, Auth Token, and phone number into the Twilio Credentials section on this screen. Then follow the Webhook Setup Guide to finish connecting.
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Twilio Connection</Text>
           <View style={styles.card}>
             <View style={styles.settingRow}>
@@ -722,6 +674,13 @@ export default function SettingsScreen() {
                 </View>
               </View>
             </View>
+            <View style={styles.settingDivider} />
+            <Pressable style={styles.twilioDetailsBtn} onPress={openTwilioModal}>
+              <Ionicons name={settings.twilioAccountSid ? 'pencil-outline' : 'add-circle-outline'} size={18} color={Colors.accent} />
+              <Text style={styles.twilioDetailsBtnText}>
+                {settings.twilioAccountSid ? 'Edit Twilio Details' : 'Add Twilio Details'}
+              </Text>
+            </Pressable>
           </View>
         </View>
 
@@ -1183,6 +1142,84 @@ export default function SettingsScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showTwilioModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowTwilioModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowTwilioModal(false)} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalWrapper}
+        >
+          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Twilio Details</Text>
+              <Pressable onPress={() => setShowTwilioModal(false)} hitSlop={12}>
+                <Ionicons name="close" size={24} color={Colors.textSecondary} />
+              </Pressable>
+            </View>
+            <Text style={styles.modalSubtitle}>
+              Find these in your Twilio Console at twilio.com/console
+            </Text>
+
+            <View style={styles.modalField}>
+              <Text style={styles.modalLabel}>Account SID</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={twilioSid}
+                onChangeText={setTwilioSid}
+                placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                placeholderTextColor={Colors.textTertiary}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.modalField}>
+              <Text style={styles.modalLabel}>Auth Token</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={twilioToken}
+                onChangeText={setTwilioToken}
+                placeholder="Your Twilio Auth Token"
+                placeholderTextColor={Colors.textTertiary}
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry
+              />
+            </View>
+
+            <View style={styles.modalField}>
+              <Text style={styles.modalLabel}>Phone Number</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={twilioPhone}
+                onChangeText={setTwilioPhone}
+                placeholder="+61400000000"
+                placeholderTextColor={Colors.textTertiary}
+                keyboardType="phone-pad"
+                autoCorrect={false}
+              />
+            </View>
+
+            <Pressable
+              style={[styles.modalSaveBtn, twilioSaving && { opacity: 0.6 }]}
+              onPress={handleSaveTwilio}
+              disabled={twilioSaving}
+            >
+              {twilioSaving ? (
+                <ActivityIndicator color={Colors.white} />
+              ) : (
+                <Text style={styles.modalSaveBtnText}>Save</Text>
+              )}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -1695,5 +1732,97 @@ const styles = StyleSheet.create({
     borderColor: Colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  settingDivider: {
+    height: 1,
+    backgroundColor: Colors.borderLight,
+    marginVertical: 4,
+  },
+  twilioDetailsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  twilioDetailsBtnText: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.accent,
+  },
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  modalWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  modalSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.text,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    marginBottom: 20,
+  },
+  modalField: {
+    marginBottom: 14,
+  },
+  modalLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+    marginBottom: 6,
+  },
+  modalInput: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+  },
+  modalSaveBtn: {
+    backgroundColor: Colors.accent,
+    borderRadius: 12,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  modalSaveBtnText: {
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.white,
   },
 });
