@@ -185,7 +185,7 @@ async function getTwilioConfig(userId) {
   const sid = s?.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "";
   const token = s?.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "";
   const phone = s?.twilioPhoneNumber || process.env.TWILIO_PHONE_NUMBER || "";
-  return { sid, token, phone, businessName: s?.businessName || "Your Local Sparky" };
+  return { sid, token, phone, businessName: s?.businessName || "" };
 }
 function addLogEntry(log2, role, message) {
   log2.push({ role, message, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
@@ -216,8 +216,9 @@ async function sendInitialMissedCallSms(callId, userId) {
   const { businessName } = await getTwilioConfig(userId);
   const servicesList = await getServices(userId);
   const menuText = buildServicesMenuText(servicesList);
-  const message = `Hi! Sorry we missed your call!
-This is ${businessName}.
+  const businessLine = businessName ? `
+This is ${businessName}.` : "";
+  const message = `Hi! Sorry we missed your call!${businessLine}
 
 Can we grab your name to get started?`;
   await sendSms(call.phoneNumber, message, userId);
@@ -870,12 +871,25 @@ async function registerRoutes(app2) {
       if (matchingSettings.length === 1) {
         settingsRow = matchingSettings[0];
       } else {
-        const recentCalls = await db.select().from(missedCalls).where(eq3(missedCalls.phoneNumber, from)).orderBy(desc2(missedCalls.timestamp)).limit(1);
-        if (recentCalls.length > 0) {
-          const match = matchingSettings.find((s) => s.userId === recentCalls[0].userId);
-          settingsRow = match || matchingSettings[0];
+        const scored = matchingSettings.map((s) => {
+          let score = 0;
+          if (s.businessName && s.businessName.trim()) score += 2;
+          const svcList = s.services;
+          if (Array.isArray(svcList) && svcList.length > 0) score += 1;
+          return { s, score };
+        }).sort((a, b) => b.score - a.score);
+        const topScore = scored[0].score;
+        const topCandidates = scored.filter((x) => x.score === topScore).map((x) => x.s);
+        if (topCandidates.length === 1) {
+          settingsRow = topCandidates[0];
         } else {
-          settingsRow = matchingSettings[0];
+          const recentCalls = await db.select().from(missedCalls).where(eq3(missedCalls.phoneNumber, from)).orderBy(desc2(missedCalls.timestamp)).limit(1);
+          if (recentCalls.length > 0) {
+            const match = topCandidates.find((s) => s.userId === recentCalls[0].userId);
+            settingsRow = match || topCandidates[0];
+          } else {
+            settingsRow = topCandidates[0];
+          }
         }
       }
       userId = settingsRow.userId;

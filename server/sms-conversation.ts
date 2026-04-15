@@ -60,7 +60,7 @@ async function getTwilioConfig(userId: string) {
   const sid = s?.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "";
   const token = s?.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "";
   const phone = s?.twilioPhoneNumber || process.env.TWILIO_PHONE_NUMBER || "";
-  return { sid, token, phone, businessName: s?.businessName || "Your Local Sparky" };
+  return { sid, token, phone, businessName: s?.businessName || "" };
 }
 
 function addLogEntry(log: Array<{role: string; message: string; timestamp: string}>, role: string, message: string) {
@@ -96,7 +96,8 @@ export async function sendInitialMissedCallSms(callId: string, userId: string): 
   const servicesList = await getServices(userId);
   const menuText = buildServicesMenuText(servicesList);
 
-  const message = `Hi! Sorry we missed your call!\nThis is ${businessName}.\n\nCan we grab your name to get started?`;
+  const businessLine = businessName ? `\nThis is ${businessName}.` : "";
+  const message = `Hi! Sorry we missed your call!${businessLine}\n\nCan we grab your name to get started?`;
 
   await sendSms(call.phoneNumber, message, userId);
 

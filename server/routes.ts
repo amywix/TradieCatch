@@ -182,16 +182,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (matchingSettings.length === 1) {
         settingsRow = matchingSettings[0];
       } else {
-        // Multiple users share this number — prefer the one with the most recent missed call
-        const recentCalls = await db.select().from(missedCalls)
-          .where(eq(missedCalls.phoneNumber, from))
-          .orderBy(desc(missedCalls.timestamp))
-          .limit(1);
-        if (recentCalls.length > 0) {
-          const match = matchingSettings.find(s => s.userId === recentCalls[0].userId);
-          settingsRow = match || matchingSettings[0];
+        // Multiple users share this number — score each by completeness:
+        // +2 if businessName is set, +1 if services are customised
+        const scored = matchingSettings.map(s => {
+          let score = 0;
+          if (s.businessName && (s.businessName as string).trim()) score += 2;
+          const svcList = s.services as string[] | null;
+          if (Array.isArray(svcList) && svcList.length > 0) score += 1;
+          return { s, score };
+        }).sort((a, b) => b.score - a.score);
+
+        // Among equally-scored candidates prefer the one with the most recent call
+        const topScore = scored[0].score;
+        const topCandidates = scored.filter(x => x.score === topScore).map(x => x.s);
+
+        if (topCandidates.length === 1) {
+          settingsRow = topCandidates[0];
         } else {
-          settingsRow = matchingSettings[0];
+          const recentCalls = await db.select().from(missedCalls)
+            .where(eq(missedCalls.phoneNumber, from))
+            .orderBy(desc(missedCalls.timestamp))
+            .limit(1);
+          if (recentCalls.length > 0) {
+            const match = topCandidates.find(s => s.userId === recentCalls[0].userId);
+            settingsRow = match || topCandidates[0];
+          } else {
+            settingsRow = topCandidates[0];
+          }
         }
       }
 
