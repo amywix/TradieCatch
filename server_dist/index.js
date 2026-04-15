@@ -129,7 +129,7 @@ var pool = new pg.Pool({
 var db = drizzle(pool, { schema: schema_exports });
 
 // server/routes.ts
-import { eq as eq3, desc as desc2, and as and2 } from "drizzle-orm";
+import { eq as eq3, desc as desc2, and as and2, not } from "drizzle-orm";
 
 // server/sms-conversation.ts
 import twilio from "twilio";
@@ -1050,6 +1050,12 @@ async function registerRoutes(app2) {
     res.json(row || { id: "default", userId: req.userId, businessName: "", autoReplyEnabled: true, services: DEFAULT_SERVICES });
   });
   app2.patch("/api/settings", requireAuth, async (req, res) => {
+    if (req.body.twilioPhoneNumber && req.body.twilioPhoneNumber.trim()) {
+      await db.update(settings).set({ twilioPhoneNumber: "" }).where(and2(
+        eq3(settings.twilioPhoneNumber, req.body.twilioPhoneNumber.trim()),
+        not(eq3(settings.userId, req.userId))
+      ));
+    }
     const existing = await db.select().from(settings).where(eq3(settings.userId, req.userId));
     if (existing.length === 0) {
       const [row2] = await db.insert(settings).values({

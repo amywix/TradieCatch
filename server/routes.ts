@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { db } from "./db";
 import { sql as rawSql } from "drizzle-orm";
 import { missedCalls, jobs, settings, smsTemplates, users, DEFAULT_SERVICES } from "@shared/schema";
-import { eq, desc, and, SQL } from "drizzle-orm";
+import { eq, desc, and, not, SQL } from "drizzle-orm";
 import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
 import { register, login, getMe, requireAuth, type AuthRequest } from "./auth";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
@@ -407,6 +407,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/settings", requireAuth, async (req: AuthRequest, res: Response) => {
+    // If a Twilio phone number is being saved, remove it from every other account first
+    if (req.body.twilioPhoneNumber && req.body.twilioPhoneNumber.trim()) {
+      await db.update(settings)
+        .set({ twilioPhoneNumber: "" })
+        .where(and(
+          eq(settings.twilioPhoneNumber, req.body.twilioPhoneNumber.trim()),
+          not(eq(settings.userId, req.userId!))
+        ));
+    }
+
     const existing = await db.select().from(settings).where(eq(settings.userId, req.userId!));
     if (existing.length === 0) {
       const [row] = await db.insert(settings).values({
