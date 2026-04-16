@@ -50,6 +50,7 @@ export interface AppSettings {
   services: string[];
   bookingCalendarEnabled: boolean;
   bookingSlots: string[];
+  bookingDates: string[];
 }
 
 interface DataContextValue {
@@ -99,6 +100,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   services: DEFAULT_SERVICES,
   bookingCalendarEnabled: false,
   bookingSlots: DEFAULT_BOOKING_SLOTS,
+  bookingDates: [],
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {

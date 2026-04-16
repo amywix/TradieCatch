@@ -19,12 +19,20 @@ async function getServices(userId: string): Promise<string[]> {
   return (s?.services as string[]) || DEFAULT_SERVICES;
 }
 
-async function getBookingConfig(userId: string): Promise<{ enabled: boolean; slots: string[] }> {
+async function getBookingConfig(userId: string): Promise<{ enabled: boolean; slots: string[]; dates: string[] }> {
   const s = await getSettingsForUser(userId);
   return {
     enabled: s?.bookingCalendarEnabled ?? false,
     slots: (s?.bookingSlots as string[]) || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
+    dates: (s?.bookingDates as string[]) || [],
   };
+}
+
+function resolveBookingDates(customDates: string[]): { label: string; dateStr: string }[] {
+  if (customDates.length > 0) {
+    return customDates.map(label => ({ label, dateStr: "" }));
+  }
+  return getNextAvailableDates(5);
 }
 
 function getNextAvailableDates(count: number = 5): { label: string; dateStr: string }[] {
@@ -315,7 +323,7 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
         updates.callerEmail = reply.toLowerCase();
         const booking = await getBookingConfig(callUserId);
         if (booking.enabled) {
-          const dates = getNextAvailableDates(5);
+          const dates = resolveBookingDates(booking.dates);
           const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
           response = `Thanks! What day works best for you?\n\n${dateMenu}`;
           newState = "awaiting_booking_date";
@@ -331,12 +339,13 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
     }
 
     case "awaiting_booking_date": {
-      const dates = getNextAvailableDates(5);
-      const dateChoice = reply.replace(/[^1-5]/g, "");
+      const booking = await getBookingConfig(callUserId);
+      const dates = resolveBookingDates(booking.dates);
+      const maxDate = dates.length;
+      const dateChoice = reply.replace(new RegExp(`[^1-${maxDate}]`, "g"), "");
       const idx = parseInt(dateChoice, 10) - 1;
       if (idx >= 0 && idx < dates.length) {
         updates.selectedTime = dates[idx].label;
-        const booking = await getBookingConfig(callUserId);
         const slotMenu = booking.slots.map((s, i) => `${i + 1}. ${s}`).join("\n");
         response = `Great, ${dates[idx].label}!\n\nWhat time suits you?\n\n${slotMenu}`;
         newState = "awaiting_booking_slot";
@@ -438,7 +447,8 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
     case "demo_offer_sent": {
       const upper = reply.toUpperCase();
       if (upper.includes("YES")) {
-        const dates = getNextAvailableDates(5);
+        const bookingCfgForOffer = await getBookingConfig(callUserId);
+        const dates = resolveBookingDates(bookingCfgForOffer.dates);
         const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
         response = `Awesome! Let's get you booked in for a free 10-minute setup call.\n\nWhat day works best for you?\n\n${dateMenu}`;
         newState = "demo_awaiting_date";
@@ -454,8 +464,10 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
     }
 
     case "demo_awaiting_date": {
-      const dates = getNextAvailableDates(5);
-      const dateChoice = reply.replace(/[^1-5]/g, "");
+      const bookingCfg = await getBookingConfig(callUserId);
+      const dates = resolveBookingDates(bookingCfg.dates);
+      const maxIdx = dates.length;
+      const dateChoice = reply.replace(new RegExp(`[^1-${maxIdx}]`, "g"), "");
       const idx = parseInt(dateChoice, 10) - 1;
       if (idx >= 0 && idx < dates.length) {
         updates.selectedTime = dates[idx].label;
@@ -548,10 +560,17 @@ export async function handleDemoSmsFlow(fromPhone: string, body: string, toPhone
   const activeDemo = callerCalls.find(c => DEMO_ACTIVE_STATES.has(c.conversationState)) || null;
   const completedDemo = callerCalls.find(c => c.conversationState === "demo_completed") || null;
 
-  // ── No existing conversation → start the demo flow immediately ───────────
+  // ── No existing conversation ──────────────────────────────────────────────
   if (!activeDemo && !completedDemo) {
-    console.log(`Demo flow: new contact from ${fromPhone} — sending offer`);
-    return await handleDemoTrigger(fromPhone, userId);
+    if (body.trim().toLowerCase().includes("demo")) {
+      console.log(`Demo flow: new contact from ${fromPhone} — sending offer`);
+      return await handleDemoTrigger(fromPhone, userId);
+    }
+    // Non-"demo" first message — nudge them to the right word
+    const { businessName } = await getTwilioConfig(userId);
+    const nudge = `Hi! 👋 Text the word DEMO to see how TradieCatch works and claim your FREE 7-day trial (includes free setup).\n\n- ${businessName || "TradieCatch"}`;
+    await sendSms(fromPhone, nudge, userId);
+    return nudge;
   }
 
   const call = activeDemo || completedDemo!;
@@ -567,7 +586,8 @@ export async function handleDemoSmsFlow(fromPhone: string, body: string, toPhone
     case "demo_offer_sent": {
       const upper = reply.toUpperCase();
       if (upper.includes("YES")) {
-        const dates = getNextAvailableDates(5);
+        const bookingCfgOffer = await getBookingConfig(userId);
+        const dates = resolveBookingDates(bookingCfgOffer.dates);
         const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
         response = `Awesome! Let's get you booked in for a free 10-minute setup call.\n\nWhat day works best for you?\n\n${dateMenu}`;
         newState = "demo_awaiting_date";
@@ -580,8 +600,10 @@ export async function handleDemoSmsFlow(fromPhone: string, body: string, toPhone
     }
 
     case "demo_awaiting_date": {
-      const dates = getNextAvailableDates(5);
-      const dateChoice = reply.replace(/[^1-5]/g, "");
+      const bookingCfg = await getBookingConfig(userId);
+      const dates = resolveBookingDates(bookingCfg.dates);
+      const maxIdx = dates.length;
+      const dateChoice = reply.replace(new RegExp(`[^1-${maxIdx}]`, "g"), "");
       const idx = parseInt(dateChoice, 10) - 1;
       if (idx >= 0 && idx < dates.length) {
         updates.selectedTime = dates[idx].label;

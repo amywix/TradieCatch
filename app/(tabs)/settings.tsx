@@ -272,6 +272,44 @@ export default function SettingsScreen() {
   const [addingSlot, setAddingSlot] = useState(false);
   const [newSlotText, setNewSlotText] = useState('');
 
+  const bookingDates = settings.bookingDates || [];
+  const [editingDateIdx, setEditingDateIdx] = useState<number | null>(null);
+  const [editingDateText, setEditingDateText] = useState('');
+  const [addingDate, setAddingDate] = useState(false);
+  const [newDateText, setNewDateText] = useState('');
+
+  const handleSaveDateEdit = useCallback(async () => {
+    if (editingDateIdx === null) return;
+    const trimmed = editingDateText.trim();
+    if (!trimmed) return;
+    const updated = [...bookingDates];
+    updated[editingDateIdx] = trimmed;
+    await updateAppSettings({ bookingDates: updated });
+    setEditingDateIdx(null);
+    setEditingDateText('');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [editingDateIdx, editingDateText, bookingDates, updateAppSettings]);
+
+  const handleAddDate = useCallback(async () => {
+    const trimmed = newDateText.trim();
+    if (!trimmed) return;
+    const updated = [...bookingDates, trimmed];
+    await updateAppSettings({ bookingDates: updated });
+    setNewDateText('');
+    setAddingDate(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [newDateText, bookingDates, updateAppSettings]);
+
+  const handleDeleteDate = useCallback(async (idx: number) => {
+    if (bookingDates.length <= 1) {
+      Alert.alert("Can't Remove", "You need at least one available date.");
+      return;
+    }
+    const updated = bookingDates.filter((_: string, i: number) => i !== idx);
+    await updateAppSettings({ bookingDates: updated });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [bookingDates, updateAppSettings]);
+
   const handleSaveSlotEdit = useCallback(async () => {
     if (editingSlotIdx === null) return;
     const trimmed = editingSlotText.trim();
@@ -1019,6 +1057,102 @@ export default function SettingsScreen() {
                         <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
                       </Pressable>
                       <Pressable onPress={() => { setAddingSlot(false); setNewSlotText(''); }} hitSlop={8}>
+                        <Ionicons name="close-circle" size={22} color={Colors.textTertiary} />
+                      </Pressable>
+                    </View>
+                  </>
+                )}
+              </View>
+            </>
+          )}
+          {settings.bookingCalendarEnabled && (
+            <>
+              <View style={[styles.sectionHeader, { marginTop: 12 }]}>
+                <Text style={[styles.sectionHint, { fontFamily: 'Inter_600SemiBold', color: Colors.textSecondary }]}>Available Dates</Text>
+                <Pressable
+                  style={styles.addButton}
+                  onPress={() => { setAddingDate(true); setNewDateText(''); }}
+                  hitSlop={8}
+                >
+                  <Ionicons name="add-circle" size={22} color={Colors.accent} />
+                </Pressable>
+              </View>
+              <Text style={styles.sectionHint}>
+                Add specific dates to offer customers. Leave empty to auto-generate the next 5 weekdays.
+              </Text>
+              <View style={styles.card}>
+                {bookingDates.length === 0 && !addingDate ? (
+                  <View style={[styles.serviceRow, { paddingVertical: 14 }]}>
+                    <Text style={[styles.settingDescription, { flex: 1, textAlign: 'center', fontStyle: 'italic' }]}>
+                      Auto-generating next 5 weekdays
+                    </Text>
+                  </View>
+                ) : (
+                  bookingDates.map((date: string, idx: number) => (
+                    <View key={`date-${idx}`}>
+                      {idx > 0 && <View style={styles.serviceDivider} />}
+                      {editingDateIdx === idx ? (
+                        <View style={styles.serviceEditRow}>
+                          <View style={styles.serviceNum}>
+                            <Text style={styles.serviceNumText}>{idx + 1}</Text>
+                          </View>
+                          <TextInput
+                            style={styles.serviceEditInput}
+                            value={editingDateText}
+                            onChangeText={setEditingDateText}
+                            autoFocus
+                            onSubmitEditing={handleSaveDateEdit}
+                            placeholder="e.g. Mon 21 Apr"
+                            placeholderTextColor={Colors.textTertiary}
+                          />
+                          <Pressable onPress={handleSaveDateEdit} hitSlop={8}>
+                            <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
+                          </Pressable>
+                          <Pressable onPress={() => { setEditingDateIdx(null); setEditingDateText(''); }} hitSlop={8}>
+                            <Ionicons name="close-circle" size={22} color={Colors.textTertiary} />
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <View style={styles.serviceRow}>
+                          <View style={styles.serviceNum}>
+                            <Text style={styles.serviceNumText}>{idx + 1}</Text>
+                          </View>
+                          <Pressable style={styles.serviceTextWrap} onPress={() => { setEditingDateIdx(idx); setEditingDateText(date); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
+                            <Text style={styles.serviceText}>{date}</Text>
+                          </Pressable>
+                          <View style={styles.serviceActions}>
+                            <Pressable onPress={() => { setEditingDateIdx(idx); setEditingDateText(date); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} hitSlop={6}>
+                              <Feather name="edit-2" size={14} color={Colors.textTertiary} />
+                            </Pressable>
+                            <Pressable onPress={() => handleDeleteDate(idx)} hitSlop={6}>
+                              <Ionicons name="trash-outline" size={16} color={Colors.danger} />
+                            </Pressable>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  ))
+                )}
+                {addingDate && (
+                  <>
+                    {bookingDates.length > 0 && <View style={styles.serviceDivider} />}
+                    <View style={styles.serviceEditRow}>
+                      <View style={[styles.serviceNum, { backgroundColor: Colors.accent + '20' }]}>
+                        <Ionicons name="add" size={14} color={Colors.accent} />
+                      </View>
+                      <TextInput
+                        style={styles.serviceEditInput}
+                        value={newDateText}
+                        onChangeText={setNewDateText}
+                        autoFocus
+                        onSubmitEditing={handleAddDate}
+                        placeholder="e.g. Thu 24 Apr"
+                        placeholderTextColor={Colors.textTertiary}
+                      />
+                      <Pressable onPress={handleAddDate} hitSlop={8}>
+                        <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
+                      </Pressable>
+                      <Pressable onPress={() => { setAddingDate(false); setNewDateText(''); }} hitSlop={8}>
                         <Ionicons name="close-circle" size={22} color={Colors.textTertiary} />
                       </Pressable>
                     </View>
