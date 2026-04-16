@@ -3,6 +3,12 @@ import { db } from "./db";
 import { missedCalls, jobs, settings, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 
+// Update this URL to point to your actual demo video
+const DEMO_VIDEO_URL = "https://tradiecatch.replit.app/demo";
+
+// Time slots offered for the 10-minute setup call
+const DEMO_CALL_TIMES = ["9:00 AM", "10:00 AM", "11:00 AM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
+
 async function getSettingsForUser(userId: string) {
   const rows = await db.select().from(settings).where(eq(settings.userId, userId));
   return rows[0];
@@ -124,6 +130,30 @@ async function findUsersByTwilioNumber(toPhone: string): Promise<string[]> {
   return userIds;
 }
 
+async function handleDemoTrigger(fromPhone: string, userId: string): Promise<string> {
+  const { businessName } = await getTwilioConfig(userId);
+  const bizLine = businessName ? `from ${businessName}` : "";
+
+  const message = `Hi! Thanks for your interest in TradieCatch ${bizLine}.\n\n🎬 See how it works: ${DEMO_VIDEO_URL}\n\nStart your FREE 7-day trial today — includes free setup support, no charge until day 8!\n\nIf you'd like to take advantage of this, reply YES and we'll book a free 10-minute call to get you set up.`;
+
+  await sendSms(fromPhone, message, userId);
+
+  const log = [{ role: "business", message, timestamp: new Date().toISOString() }];
+
+  await db.insert(missedCalls).values({
+    userId,
+    callerName: "Demo Lead",
+    phoneNumber: normalizePhone(fromPhone),
+    replied: true,
+    repliedAt: new Date(),
+    conversationState: "demo_offer_sent",
+    conversationLog: log as any,
+    selectedService: "TradieCatch Setup",
+  });
+
+  return message;
+}
+
 export async function handleIncomingReply(fromPhone: string, body: string, toPhone: string): Promise<string | null> {
   const normalizedPhone = normalizePhone(fromPhone);
 
@@ -163,7 +193,8 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
   // Sort by timestamp descending
   rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-  const activeCalls = rows.filter(c => c.conversationState !== "none" && c.conversationState !== "completed");
+  const TERMINAL_STATES = new Set(["none", "completed", "demo_completed"]);
+  const activeCalls = rows.filter(c => !TERMINAL_STATES.has(c.conversationState));
   let call = activeCalls.length > 0 ? activeCalls[0] : null;
 
   if (!call) {
@@ -174,6 +205,11 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
   }
 
   if (!call) {
+    // Check if this is a new demo enquiry
+    if (body.trim().toLowerCase().includes("demo") && userIds.length > 0) {
+      console.log(`Demo trigger detected from ${fromPhone} — starting demo flow`);
+      return await handleDemoTrigger(fromPhone, userIds[0]);
+    }
     console.log(`No matching call found for phone: "${fromPhone}" (normalized: "${normalizedPhone}")`);
     return null;
   }
@@ -394,6 +430,74 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
       const { businessName } = await getTwilioConfig(callUserId);
       response = `Thanks for your message! Your booking is already logged. Our team will be in touch shortly.\n\n- ${businessName}`;
       newState = "completed";
+      break;
+    }
+
+    // ── Demo / lead generation flow ──────────────────────────────────────────
+
+    case "demo_offer_sent": {
+      const upper = reply.toUpperCase();
+      if (upper.includes("YES")) {
+        const dates = getNextAvailableDates(5);
+        const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+        response = `Awesome! Let's get you booked in for a free 10-minute setup call.\n\nWhat day works best for you?\n\n${dateMenu}`;
+        newState = "demo_awaiting_date";
+      } else if (body.trim().toLowerCase().includes("demo")) {
+        // They sent "demo" again — re-send the offer
+        response = `Here's the TradieCatch demo again 🎬\n${DEMO_VIDEO_URL}\n\nReply YES to book your free 10-minute setup call and start your 7-day free trial!`;
+        newState = "demo_offer_sent";
+      } else {
+        response = `No worries at all! If you change your mind, just reply YES anytime and we'll get you set up. 😊`;
+        newState = "demo_completed";
+      }
+      break;
+    }
+
+    case "demo_awaiting_date": {
+      const dates = getNextAvailableDates(5);
+      const dateChoice = reply.replace(/[^1-5]/g, "");
+      const idx = parseInt(dateChoice, 10) - 1;
+      if (idx >= 0 && idx < dates.length) {
+        updates.selectedTime = dates[idx].label;
+        const timeMenu = DEMO_CALL_TIMES.map((t, i) => `${i + 1}. ${t}`).join("\n");
+        response = `${dates[idx].label} works great!\n\nWhat time suits you for the 10-minute call?\n\n${timeMenu}`;
+        newState = "demo_awaiting_time";
+      } else {
+        const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+        response = `Please reply with a number:\n\n${dateMenu}`;
+        newState = "demo_awaiting_date";
+      }
+      break;
+    }
+
+    case "demo_awaiting_time": {
+      const timeIdx = parseInt(reply.replace(/[^0-9]/g, ""), 10) - 1;
+      if (timeIdx >= 0 && timeIdx < DEMO_CALL_TIMES.length) {
+        const timeSlot = DEMO_CALL_TIMES[timeIdx];
+        const dateLabel = call.selectedTime || updates.selectedTime || "";
+        updates.selectedTime = `${dateLabel} ${timeSlot}`;
+        const { businessName } = await getTwilioConfig(callUserId);
+        response = `All booked! 🎉\n\nYour free 10-minute TradieCatch setup call is confirmed for:\n📅 ${dateLabel} at ${timeSlot}\n\nWe'll walk you through everything and get you set up. See you then!\n\n- ${businessName || "TradieCatch"}`;
+        newState = "demo_completed";
+        updates.jobBooked = true;
+      } else {
+        const timeMenu = DEMO_CALL_TIMES.map((t, i) => `${i + 1}. ${t}`).join("\n");
+        response = `Please reply with a number:\n\n${timeMenu}`;
+        newState = "demo_awaiting_time";
+      }
+      break;
+    }
+
+    case "demo_completed": {
+      if (body.trim().toLowerCase().includes("demo")) {
+        // Re-engage — send the offer again
+        response = `Great to hear from you again! 😊\n\n🎬 TradieCatch demo: ${DEMO_VIDEO_URL}\n\nReply YES to book a free 10-minute setup call and start your 7-day free trial!`;
+        newState = "demo_offer_sent";
+      } else {
+        const { businessName } = await getTwilioConfig(callUserId);
+        response = `Your setup call is already booked — we'll be in touch! 🙌\n\n- ${businessName || "TradieCatch"}`;
+        newState = "demo_completed";
+      }
       break;
     }
 
