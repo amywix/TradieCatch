@@ -492,6 +492,26 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
         response = `All booked! 🎉\n\nYour free 10-minute TradieCatch setup call is confirmed for:\n📅 ${dateLabel} at ${timeSlot}\n\nWe'll walk you through everything and get you set up. See you then!\n\n- ${businessName || "TradieCatch"}`;
         newState = "demo_completed";
         updates.jobBooked = true;
+
+        // Push the demo setup call into the jobs list
+        const bookingCfgJob = await getBookingConfig(callUserId);
+        const allDates = resolveBookingDates(bookingCfgJob.dates);
+        const matchedDate = allDates.find(d => d.label === dateLabel);
+        const dateStr = matchedDate?.dateStr || dateLabel;
+        await db.insert(jobs).values({
+          userId: callUserId,
+          callerName: call.callerName || `Demo Lead (${call.phoneNumber})`,
+          phoneNumber: call.phoneNumber,
+          jobType: "TradieCatch Setup Call (Demo)",
+          date: dateStr,
+          time: timeSlot,
+          address: "",
+          notes: "10-min onboarding call booked via SMS demo flow",
+          email: null,
+          status: "confirmed",
+          missedCallId: call.id,
+          isUrgent: false,
+        });
       } else {
         const timeMenu = DEMO_CALL_TIMES.map((t, i) => `${i + 1}. ${t}`).join("\n");
         response = `Please reply with a number:\n\n${timeMenu}`;
@@ -628,6 +648,26 @@ export async function handleDemoSmsFlow(fromPhone: string, body: string, toPhone
         response = `All booked! 🎉\n\nYour free 10-minute TradieCatch setup call is confirmed for:\n📅 ${dateLabel} at ${timeSlot}\n\nWe'll walk you through everything and get you set up. See you then!\n\n- ${businessName || "TradieCatch"}`;
         newState = "demo_completed";
         updates.jobBooked = true;
+
+        // Push the demo setup call into the jobs list
+        const bookingCfgJob = await getBookingConfig(userId);
+        const allDates = resolveBookingDates(bookingCfgJob.dates);
+        const matchedDate = allDates.find(d => d.label === dateLabel);
+        const dateStr = matchedDate?.dateStr || dateLabel;
+        await db.insert(jobs).values({
+          userId,
+          callerName: call.callerName || `Demo Lead (${call.phoneNumber})`,
+          phoneNumber: call.phoneNumber,
+          jobType: "TradieCatch Setup Call (Demo)",
+          date: dateStr,
+          time: timeSlot,
+          address: "",
+          notes: "10-min onboarding call booked via SMS demo flow",
+          email: null,
+          status: "confirmed",
+          missedCallId: call.id,
+          isUrgent: false,
+        });
       } else {
         const timeMenu = DEMO_CALL_TIMES.map((t, i) => `${i + 1}. ${t}`).join("\n");
         response = `Please reply with a number:\n\n${timeMenu}`;
