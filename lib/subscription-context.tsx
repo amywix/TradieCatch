@@ -50,6 +50,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     async function init() {
+      if (mounted) setIsLoading(true);
       try {
         await checkSubscription();
       } catch {
@@ -69,7 +70,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, [isAuthenticated, checkSubscription]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
