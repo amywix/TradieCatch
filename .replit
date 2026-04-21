@@ -82,3 +82,4 @@ EXPO_PUBLIC_DEPLOYMENT_DOMAIN = "tradiecatch.replit.app"
 
 [userenv.production]
 PORT = "8081"
+ADMIN_PASSWORD_RESET = "test123456"
