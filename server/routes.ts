@@ -23,6 +23,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", login);
   app.get("/api/auth/me", requireAuth, getMe as any);
 
+  app.post("/api/push-token", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { token } = req.body || {};
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ error: "Missing token" });
+      }
+      await db.update(users).set({ pushToken: token }).where(eq(users.id, req.userId!));
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("push-token error", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/push-token", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      await db.update(users).set({ pushToken: null }).where(eq(users.id, req.userId!));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/debug/twilio-numbers", async (_req: Request, res: Response) => {
     try {
       const allSettings = await db.select({

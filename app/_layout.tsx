@@ -10,11 +10,13 @@ import { queryClient } from "@/lib/query-client";
 import { DataProvider } from "@/lib/data-context";
 import { SubscriptionProvider } from "@/lib/subscription-context";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { usePushNotifications } from "@/lib/use-push-notifications";
 
 SplashScreen.preventAutoHideAsync();
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
+  usePushNotifications();
   const router = useRouter();
   const segments = useSegments();
 

@@ -2,6 +2,7 @@ import twilio from "twilio";
 import { db } from "./db";
 import { missedCalls, jobs, settings, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { sendPushToUser } from "./push";
 
 // Update this URL to point to your actual demo video
 const DEMO_VIDEO_URL = "https://tradiecatch.replit.app/demo";
@@ -388,6 +389,15 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
           isUrgent: call.isUrgent || updates.isUrgent || false,
         });
 
+        const jobName = call.callerName || updates.callerName || "New customer";
+        const jobService = call.selectedService || updates.selectedService || "Job";
+        sendPushToUser(
+          callUserId,
+          `${call.isUrgent || updates.isUrgent ? "🚨 Urgent: " : "📅 "}New job booked`,
+          `${jobName} — ${jobService} on ${dateLabel} at ${timeSlot}`,
+          { type: "job_booked", missedCallId: call.id }
+        );
+
         updates.jobBooked = true;
       } else {
         const slotMenu = booking.slots.map((s, i) => `${i + 1}. ${s}`).join("\n");
@@ -430,6 +440,15 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
         missedCallId: call.id,
         isUrgent: call.isUrgent || updates.isUrgent || false,
       });
+
+      const jobName2 = call.callerName || updates.callerName || "New customer";
+      const jobService2 = call.selectedService || updates.selectedService || "Job";
+      sendPushToUser(
+        callUserId,
+        `${call.isUrgent || updates.isUrgent ? "🚨 Urgent: " : "📅 "}New job booked`,
+        `${jobName2} — ${jobService2} (${timeLabel})`,
+        { type: "job_booked", missedCallId: call.id }
+      );
 
       updates.jobBooked = true;
       break;
@@ -512,6 +531,13 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
           missedCallId: call.id,
           isUrgent: false,
         });
+
+        sendPushToUser(
+          callUserId,
+          "🎬 New demo lead booked",
+          `${call.phoneNumber} booked a setup call on ${dateLabel} at ${timeSlot}`,
+          { type: "demo_booked", missedCallId: call.id }
+        );
       } else {
         const timeMenu = DEMO_CALL_TIMES.map((t, i) => `${i + 1}. ${t}`).join("\n");
         response = `Please reply with a number:\n\n${timeMenu}`;
@@ -668,6 +694,13 @@ export async function handleDemoSmsFlow(fromPhone: string, body: string, toPhone
           missedCallId: call.id,
           isUrgent: false,
         });
+
+        sendPushToUser(
+          userId,
+          "🎬 New demo lead booked",
+          `${call.phoneNumber} booked a setup call on ${dateLabel} at ${timeSlot}`,
+          { type: "demo_booked", missedCallId: call.id }
+        );
       } else {
         const timeMenu = DEMO_CALL_TIMES.map((t, i) => `${i + 1}. ${t}`).join("\n");
         response = `Please reply with a number:\n\n${timeMenu}`;
