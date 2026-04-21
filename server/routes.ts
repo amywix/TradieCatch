@@ -159,6 +159,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(call);
   });
 
+  // Calendly webhook — fires when a booking is completed (invitee.created)
+  // Configure in Calendly: https://calendly.com/integrations/webhooks → URL: <app>/api/calendly/webhook
+  app.post("/api/calendly/webhook", async (req: Request, res: Response) => {
+    try {
+      const { sendSms } = await import("./sms-conversation");
+      const event = req.body?.event || "";
+      const payload = req.body?.payload || {};
+      console.log(`Calendly webhook event: ${event}`);
+
+      if (event !== "invitee.created") {
+        return res.status(200).json({ ok: true, ignored: event });
+      }
+
+      const inviteeName: string = payload?.name || payload?.invitee?.name || "there";
+      const startTimeRaw: string = payload?.scheduled_event?.start_time || payload?.event?.start_time || "";
+      const eventName: string = payload?.scheduled_event?.name || payload?.event_type?.name || "your TradieCatch call";
+
+      // Try to extract a phone number from invitee SMS reminder, custom answers, or text reminder
+      let invPhone: string =
+        payload?.text_reminder_number ||
+        payload?.invitee?.text_reminder_number ||
+        "";
+      const qa: any[] = payload?.questions_and_answers || payload?.invitee?.questions_and_answers || [];
+      if (!invPhone && Array.isArray(qa)) {
+        for (const item of qa) {
+          const ans = String(item?.answer || "");
+          const m = ans.match(/\+?\d[\d\s\-().]{6,}/);
+          if (m) { invPhone = m[0]; break; }
+        }
+      }
+
+      // Format the booked time for the SMS
+      let timeLabel = "";
+      if (startTimeRaw) {
+        try {
+          const d = new Date(startTimeRaw);
+          timeLabel = d.toLocaleString("en-AU", {
+            weekday: "short", day: "numeric", month: "short",
+            hour: "numeric", minute: "2-digit", hour12: true,
+            timeZone: "Australia/Sydney",
+          });
+        } catch { timeLabel = startTimeRaw; }
+      }
+
+      // Find the most recent demo conversation awaiting Calendly booking
+      const candidateStates = ["demo_awaiting_calendly", "demo_offer_sent"];
+      let targetCall: any = null;
+
+      if (invPhone) {
+        const normalize = (p: string) => p.replace(/[^\d+]/g, "");
+        const target = normalize(invPhone);
+        const all = await db.select().from(missedCalls);
+        const matched = all
+          .filter(c => candidateStates.includes(c.conversationState as string))
+          .filter(c => {
+            const a = normalize(c.phoneNumber);
+            return a.endsWith(target.slice(-9)) || target.endsWith(a.slice(-9));
+          })
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        targetCall = matched[0] || null;
+      }
+
+      // Fallback: most recent awaiting-calendly conversation in the last 24h
+      if (!targetCall) {
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+        const all = await db.select().from(missedCalls);
+        const recent = all
+          .filter(c => c.conversationState === "demo_awaiting_calendly")
+          .filter(c => new Date(c.timestamp).getTime() > cutoff)
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        targetCall = recent[0] || null;
+      }
+
+      if (!targetCall) {
+        console.log("Calendly webhook: no matching demo conversation found");
+        return res.status(200).json({ ok: true, matched: false });
+      }
+
+      const confirmation = `🎉 You're all booked, ${inviteeName.split(" ")[0]}!\n\n${timeLabel ? `📅 ${timeLabel}\n\n` : ""}I'll see you on the call. If anything changes you can reschedule from your Calendly confirmation email.\n\n— Amy, TradieCatch`;
+
+      await sendSms(targetCall.phoneNumber, confirmation, targetCall.userId);
+
+      const log = (targetCall.conversationLog || []) as any[];
+      log.push({ role: "business", message: confirmation, timestamp: new Date().toISOString() });
+      await db.update(missedCalls).set({
+        conversationState: "demo_completed",
+        conversationLog: log as any,
+      }).where(eq(missedCalls.id, targetCall.id));
+
+      // Also create a job entry so it shows up in the Jobs list
+      await db.insert(jobs).values({
+        userId: targetCall.userId,
+        callerName: inviteeName || targetCall.callerName || `Demo Lead (${targetCall.phoneNumber})`,
+        phoneNumber: targetCall.phoneNumber,
+        jobType: "TradieCatch Setup Call (Calendly)",
+        date: startTimeRaw ? startTimeRaw.slice(0, 10) : "",
+        time: timeLabel,
+        address: "",
+        notes: `Booked via Calendly: ${eventName}`,
+        email: payload?.email || payload?.invitee?.email || null,
+        status: "confirmed",
+        missedCallId: targetCall.id,
+        isUrgent: false,
+      });
+
+      res.status(200).json({ ok: true, matched: true });
+    } catch (err) {
+      console.error("Calendly webhook error:", err);
+      res.status(200).json({ ok: false });
+    }
+  });
+
   app.post("/api/twilio/webhook", async (req: Request, res: Response) => {
     const from = req.body.From || "";
     const to = req.body.To || "";

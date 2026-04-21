@@ -5,9 +5,12 @@ import { eq, and, desc } from "drizzle-orm";
 import { sendPushToUser } from "./push";
 
 // Update this URL to point to your actual demo video
-const DEMO_VIDEO_URL = "https://tradiecatch.replit.app/demo";
+const DEMO_VIDEO_URL = "https://canva.link/v768gnwipa4gcig";
 
-// Time slots offered for the 10-minute setup call
+// Calendly booking link for the 10-minute setup call
+const CALENDLY_BOOKING_URL = "https://calendly.com/amywickham-dgbh/video-session-1hr-apple-devices";
+
+// Time slots offered for the 10-minute setup call (legacy fallback)
 const DEMO_CALL_TIMES = ["9:00 AM", "10:00 AM", "11:00 AM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
 
 async function getSettingsForUser(userId: string) {
@@ -143,7 +146,7 @@ async function handleDemoTrigger(fromPhone: string, userId: string): Promise<str
   const { businessName } = await getTwilioConfig(userId);
   const bizLine = businessName ? `from ${businessName}` : "";
 
-  const message = `Hi! Thanks for your interest in TradieCatch ${bizLine}.\n\n🎬 See how it works: ${DEMO_VIDEO_URL}\n\nStart your FREE 7-day trial today — includes free setup support, no charge until day 8!\n\nIf you'd like to take advantage of this, reply YES and we'll book a free 10-minute call to get you set up.`;
+  const message = `Thanks for your interest! 🙌\n\nThis is the same kind of experience your customers will have when they miss a call from you.\n\n🎬 Watch the quick demo: ${DEMO_VIDEO_URL}\n\nThen reply YES if you'd like to book a 10-minute call to answer any questions and get you set up.`;
 
   await sendSms(fromPhone, message, userId);
 
@@ -466,18 +469,30 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
     case "demo_offer_sent": {
       const upper = reply.toUpperCase();
       if (upper.includes("YES")) {
-        const bookingCfgForOffer = await getBookingConfig(callUserId);
-        const dates = resolveBookingDates(bookingCfgForOffer.dates);
-        const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
-        response = `Awesome! Let's get you booked in for a free 10-minute setup call.\n\nWhat day works best for you?\n\n${dateMenu}`;
-        newState = "demo_awaiting_date";
+        response = `Awesome! 🎉\n\nGrab a 10-minute slot that suits you here:\n\n📅 ${CALENDLY_BOOKING_URL}\n\nOnce you've booked I'll send you a confirmation. Talk soon!`;
+        newState = "demo_awaiting_calendly";
       } else if (body.trim().toLowerCase().includes("demo")) {
         // They sent "demo" again — re-send the offer
-        response = `Here's the TradieCatch demo again 🎬\n${DEMO_VIDEO_URL}\n\nReply YES to book your free 10-minute setup call and start your 7-day free trial!`;
+        response = `Here's the demo again 🎬\n${DEMO_VIDEO_URL}\n\nReply YES to grab a 10-minute call and I'll send you the booking link.`;
         newState = "demo_offer_sent";
       } else {
-        response = `No worries at all! If you change your mind, just reply YES anytime and we'll get you set up. 😊`;
+        response = `No worries at all! If you change your mind, just reply YES anytime and I'll send through the booking link. 😊`;
         newState = "demo_completed";
+      }
+      break;
+    }
+
+    case "demo_awaiting_calendly": {
+      const upper = reply.toUpperCase();
+      if (upper.includes("YES") || body.trim().toLowerCase().includes("link")) {
+        response = `Here's the booking link again:\n\n📅 ${CALENDLY_BOOKING_URL}`;
+        newState = "demo_awaiting_calendly";
+      } else if (body.trim().toLowerCase().includes("demo")) {
+        response = `Here's the demo again 🎬\n${DEMO_VIDEO_URL}\n\nAnd the booking link: 📅 ${CALENDLY_BOOKING_URL}`;
+        newState = "demo_awaiting_calendly";
+      } else {
+        response = `No problem! When you're ready, here's the link to book your 10-minute call:\n\n📅 ${CALENDLY_BOOKING_URL}`;
+        newState = "demo_awaiting_calendly";
       }
       break;
     }
