@@ -564,7 +564,7 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
     case "demo_completed": {
       if (body.trim().toLowerCase().includes("demo")) {
         // Re-engage — send the offer again
-        response = `Great to hear from you again! 😊\n\n🎬 TradieCatch demo: ${DEMO_VIDEO_URL}\n\nReply YES to book a free 10-minute setup call and start your 7-day free trial!`;
+        response = `Great to hear from you again! 😊\n\n🎬 TradieCatch demo: ${DEMO_VIDEO_URL}\n\nReply YES to book a free 10-minute setup call.`;
         newState = "demo_offer_sent";
       } else {
         const { businessName } = await getTwilioConfig(callUserId);
@@ -629,7 +629,7 @@ export async function handleDemoSmsFlow(fromPhone: string, body: string, toPhone
     }
     // Non-"demo" first message — nudge them to the right word
     const { businessName } = await getTwilioConfig(userId);
-    const nudge = `Hi! 👋 Text the word DEMO to see how TradieCatch works and claim your FREE 7-day trial (includes free setup).\n\n- ${businessName || "TradieCatch"}`;
+    const nudge = `Hi! 👋 Text the word DEMO to see how TradieCatch works and book a free 10-minute setup call.\n\n- ${businessName || "TradieCatch"}`;
     await sendSms(fromPhone, nudge, userId);
     return nudge;
   }
@@ -654,7 +654,7 @@ export async function handleDemoSmsFlow(fromPhone: string, body: string, toPhone
         newState = "demo_awaiting_date";
       } else {
         // Any other reply — re-send the offer
-        response = `Here's the TradieCatch demo 🎬\n${DEMO_VIDEO_URL}\n\nStart your FREE 7-day trial — includes free setup, no charge until day 8!\n\nReply YES to book your free 10-minute setup call.`;
+        response = `Here's the TradieCatch demo 🎬\n${DEMO_VIDEO_URL}\n\nReply YES to book your free 10-minute setup call.`;
         newState = "demo_offer_sent";
       }
       break;
@@ -727,7 +727,7 @@ export async function handleDemoSmsFlow(fromPhone: string, body: string, toPhone
     case "demo_completed":
     default: {
       // Re-engage anyone who messages the line again after booking
-      response = `Great to hear from you! 😊\n\n🎬 TradieCatch demo: ${DEMO_VIDEO_URL}\n\nReply YES to book a new free 10-minute setup call and start your 7-day free trial!`;
+      response = `Great to hear from you! 😊\n\n🎬 TradieCatch demo: ${DEMO_VIDEO_URL}\n\nReply YES to book a new free 10-minute setup call.`;
       newState = "demo_offer_sent";
       break;
     }

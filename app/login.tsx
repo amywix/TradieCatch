@@ -94,8 +94,8 @@ export default function LoginScreen() {
 
         <Animated.View entering={FadeInUp.delay(500).duration(500)} style={styles.landingActions}>
           <View style={styles.trialBadge}>
-            <Ionicons name="gift-outline" size={14} color={Colors.accent} />
-            <Text style={styles.trialBadgeText}>7-Day Free Trial — No charge until day 8</Text>
+            <Ionicons name="pricetag-outline" size={14} color={Colors.accent} />
+            <Text style={styles.trialBadgeText}>$99/month — Cancel anytime</Text>
           </View>
 
           <Pressable
@@ -107,7 +107,7 @@ export default function LoginScreen() {
             testID="trial-btn"
           >
             <Ionicons name="flash" size={20} color={Colors.white} />
-            <Text style={styles.trialBtnText}>Start 7-Day Free Trial</Text>
+            <Text style={styles.trialBtnText}>Get Started</Text>
           </Pressable>
 
           <Pressable
@@ -148,7 +148,7 @@ export default function LoginScreen() {
             </Text>
             <Text style={styles.formSubtitle}>
               {screen === 'register'
-                ? 'Your 7-day free trial starts after payment setup'
+                ? 'Sign up and subscribe to get started'
                 : 'Sign in to your TradieCatch account'}
             </Text>
           </View>
@@ -236,7 +236,7 @@ export default function LoginScreen() {
               <ActivityIndicator color={Colors.white} />
             ) : (
               <Text style={styles.submitBtnText}>
-                {screen === 'register' ? 'Create Account & Start Trial' : 'Sign In'}
+                {screen === 'register' ? 'Create Account' : 'Sign In'}
               </Text>
             )}
           </Pressable>
