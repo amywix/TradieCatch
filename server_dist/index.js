@@ -1,18 +1,12 @@
 var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
-
-// server/index.ts
-import express from "express";
-
-// server/routes.ts
-import { createServer } from "node:http";
-
-// server/db.ts
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
 
 // shared/schema.ts
 var schema_exports = {};
@@ -28,114 +22,190 @@ __export(schema_exports, {
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  email: text("email").notNull().unique(),
-  stripeCustomerId: text("stripe_customer_id"),
-  stripeSubscriptionId: text("stripe_subscription_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull()
-});
-var missedCalls = pgTable("missed_calls", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  callerName: text("caller_name").notNull().default("Unknown Caller"),
-  phoneNumber: text("phone_number").notNull(),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-  replied: boolean("replied").default(false).notNull(),
-  repliedAt: timestamp("replied_at"),
-  jobBooked: boolean("job_booked").default(false).notNull(),
-  conversationState: text("conversation_state").default("none").notNull(),
-  selectedService: text("selected_service"),
-  selectedSubOption: text("selected_sub_option"),
-  selectedTime: text("selected_time"),
-  jobAddress: text("job_address"),
-  isUrgent: boolean("is_urgent").default(false),
-  callerEmail: text("caller_email"),
-  conversationLog: jsonb("conversation_log").$type().default([])
-});
-var jobs = pgTable("jobs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  callerName: text("caller_name").notNull(),
-  phoneNumber: text("phone_number").notNull(),
-  jobType: text("job_type").notNull(),
-  date: text("date"),
-  time: text("time"),
-  address: text("address"),
-  notes: text("notes"),
-  email: text("email"),
-  status: text("status").default("pending").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  missedCallId: varchar("missed_call_id"),
-  isUrgent: boolean("is_urgent").default(false)
-});
-var smsTemplates = pgTable("sms_templates", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  name: text("name").notNull(),
-  message: text("message").notNull(),
-  isDefault: boolean("is_default").default(false).notNull()
-});
-var DEFAULT_SERVICES = [
-  "Power point install / repair",
-  "Ceiling fan install",
-  "Lights not working",
-  "Switchboard issue",
-  "Power outage / urgent fault",
-  "Smoke alarm install",
-  "Other"
-];
-var settings = pgTable("settings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().unique(),
-  businessName: text("business_name").default("").notNull(),
-  autoReplyEnabled: boolean("auto_reply_enabled").default(true).notNull(),
-  onboardingComplete: boolean("onboarding_complete").default(false).notNull(),
-  twilioAccountSid: text("twilio_account_sid").default(""),
-  twilioAuthToken: text("twilio_auth_token").default(""),
-  twilioPhoneNumber: text("twilio_phone_number").default(""),
-  missedCallVoiceMessage: text("missed_call_voice_message").default("Sorry we missed your call. We will SMS you now to follow up."),
-  voiceRecordingData: text("voice_recording_data"),
-  voiceRecordingMimeType: text("voice_recording_mime_type"),
-  services: jsonb("services").$type().default(DEFAULT_SERVICES),
-  bookingCalendarEnabled: boolean("booking_calendar_enabled").default(false).notNull(),
-  bookingSlots: jsonb("booking_slots").$type().default([
-    "8:00 AM",
-    "9:00 AM",
-    "10:00 AM",
-    "11:00 AM",
-    "12:00 PM",
-    "1:00 PM",
-    "2:00 PM",
-    "3:00 PM",
-    "4:00 PM"
-  ])
-});
-var insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-  email: true
+var users, missedCalls, jobs, smsTemplates, DEFAULT_SERVICES, settings, insertUserSchema;
+var init_schema = __esm({
+  "shared/schema.ts"() {
+    "use strict";
+    users = pgTable("users", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      username: text("username").notNull().unique(),
+      password: text("password").notNull(),
+      email: text("email").notNull().unique(),
+      stripeCustomerId: text("stripe_customer_id"),
+      stripeSubscriptionId: text("stripe_subscription_id"),
+      pushToken: text("push_token"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    missedCalls = pgTable("missed_calls", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").notNull(),
+      callerName: text("caller_name").notNull().default("Unknown Caller"),
+      phoneNumber: text("phone_number").notNull(),
+      timestamp: timestamp("timestamp").defaultNow().notNull(),
+      replied: boolean("replied").default(false).notNull(),
+      repliedAt: timestamp("replied_at"),
+      jobBooked: boolean("job_booked").default(false).notNull(),
+      conversationState: text("conversation_state").default("none").notNull(),
+      selectedService: text("selected_service"),
+      selectedSubOption: text("selected_sub_option"),
+      selectedTime: text("selected_time"),
+      jobAddress: text("job_address"),
+      isUrgent: boolean("is_urgent").default(false),
+      callerEmail: text("caller_email"),
+      conversationLog: jsonb("conversation_log").$type().default([]),
+      voicemailData: text("voicemail_data"),
+      voicemailMimeType: text("voicemail_mime_type"),
+      voicemailDurationSeconds: text("voicemail_duration_seconds")
+    });
+    jobs = pgTable("jobs", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").notNull(),
+      callerName: text("caller_name").notNull(),
+      phoneNumber: text("phone_number").notNull(),
+      jobType: text("job_type").notNull(),
+      date: text("date"),
+      time: text("time"),
+      address: text("address"),
+      notes: text("notes"),
+      email: text("email"),
+      status: text("status").default("pending").notNull(),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      missedCallId: varchar("missed_call_id"),
+      isUrgent: boolean("is_urgent").default(false)
+    });
+    smsTemplates = pgTable("sms_templates", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").notNull(),
+      name: text("name").notNull(),
+      message: text("message").notNull(),
+      isDefault: boolean("is_default").default(false).notNull()
+    });
+    DEFAULT_SERVICES = [
+      "Power point install / repair",
+      "Ceiling fan install",
+      "Lights not working",
+      "Switchboard issue",
+      "Power outage / urgent fault",
+      "Smoke alarm install",
+      "Other"
+    ];
+    settings = pgTable("settings", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").notNull().unique(),
+      businessName: text("business_name").default("").notNull(),
+      autoReplyEnabled: boolean("auto_reply_enabled").default(true).notNull(),
+      onboardingComplete: boolean("onboarding_complete").default(false).notNull(),
+      twilioAccountSid: text("twilio_account_sid").default(""),
+      twilioAuthToken: text("twilio_auth_token").default(""),
+      twilioPhoneNumber: text("twilio_phone_number").default(""),
+      missedCallVoiceMessage: text("missed_call_voice_message").default("Sorry we missed your call. We will SMS you now to follow up."),
+      voiceRecordingData: text("voice_recording_data"),
+      voiceRecordingMimeType: text("voice_recording_mime_type"),
+      services: jsonb("services").$type().default(DEFAULT_SERVICES),
+      bookingCalendarEnabled: boolean("booking_calendar_enabled").default(false).notNull(),
+      bookingSlots: jsonb("booking_slots").$type().default([
+        "8:00 AM",
+        "9:00 AM",
+        "10:00 AM",
+        "11:00 AM",
+        "12:00 PM",
+        "1:00 PM",
+        "2:00 PM",
+        "3:00 PM",
+        "4:00 PM"
+      ]),
+      bookingDates: jsonb("booking_dates").$type().default([]),
+      tradieMobileNumber: text("tradie_mobile_number").default(""),
+      forwardingMode: text("forwarding_mode").default("carrier_forward").notNull(),
+      voicemailEnabled: boolean("voicemail_enabled").default(true).notNull()
+    });
+    insertUserSchema = createInsertSchema(users).pick({
+      username: true,
+      password: true,
+      email: true
+    });
+  }
 });
 
 // server/db.ts
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set");
-}
-var pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+var pool, db;
+var init_db = __esm({
+  "server/db.ts"() {
+    "use strict";
+    init_schema();
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set");
+    }
+    pool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL
+    });
+    db = drizzle(pool, { schema: schema_exports });
+  }
 });
-var db = drizzle(pool, { schema: schema_exports });
 
-// server/routes.ts
-import { eq as eq3, desc as desc2, and as and2, not } from "drizzle-orm";
+// server/push.ts
+import { eq } from "drizzle-orm";
+async function sendPushToUser(userId, title, body, data = {}) {
+  try {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user || !user.pushToken) {
+      console.log(`Push: no token for user ${userId}, skipping`);
+      return;
+    }
+    const message = {
+      to: user.pushToken,
+      sound: "default",
+      title,
+      body,
+      data,
+      priority: "high"
+    };
+    const res = await fetch(EXPO_PUSH_URL, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(message)
+    });
+    const result = await res.json();
+    if (result?.data?.status === "error") {
+      console.error("Push error:", result.data);
+      if (result.data.details?.error === "DeviceNotRegistered" || result.data.details?.error === "InvalidCredentials") {
+        await db.update(users).set({ pushToken: null }).where(eq(users.id, userId));
+      }
+    } else {
+      console.log(`Push sent to user ${userId}: ${title}`);
+    }
+  } catch (err) {
+    console.error("Failed to send push:", err);
+  }
+}
+var EXPO_PUSH_URL;
+var init_push = __esm({
+  "server/push.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+    EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+  }
+});
 
 // server/sms-conversation.ts
+var sms_conversation_exports = {};
+__export(sms_conversation_exports, {
+  handleDemoSmsFlow: () => handleDemoSmsFlow,
+  handleIncomingReply: () => handleIncomingReply,
+  sendInitialMissedCallSms: () => sendInitialMissedCallSms,
+  sendSms: () => sendSms
+});
 import twilio from "twilio";
-import { eq, and, desc } from "drizzle-orm";
+import { eq as eq2, and, desc } from "drizzle-orm";
 async function getSettingsForUser(userId) {
-  const rows = await db.select().from(settings).where(eq(settings.userId, userId));
+  const rows = await db.select().from(settings).where(eq2(settings.userId, userId));
   return rows[0];
 }
 async function getServices(userId) {
@@ -146,8 +216,15 @@ async function getBookingConfig(userId) {
   const s = await getSettingsForUser(userId);
   return {
     enabled: s?.bookingCalendarEnabled ?? false,
-    slots: s?.bookingSlots || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"]
+    slots: s?.bookingSlots || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
+    dates: s?.bookingDates || []
   };
+}
+function resolveBookingDates(customDates) {
+  if (customDates.length > 0) {
+    return customDates.map((label) => ({ label, dateStr: "" }));
+  }
+  return getNextAvailableDates(5);
 }
 function getNextAvailableDates(count = 5) {
   const dates = [];
@@ -210,7 +287,7 @@ async function sendSms(to, body, userId) {
   }
 }
 async function sendInitialMissedCallSms(callId, userId) {
-  const rows = await db.select().from(missedCalls).where(eq(missedCalls.id, callId));
+  const rows = await db.select().from(missedCalls).where(eq2(missedCalls.id, callId));
   const call = rows[0];
   if (!call) throw new Error("Call not found");
   const { businessName } = await getTwilioConfig(userId);
@@ -229,7 +306,7 @@ Can we grab your name to get started?`;
     repliedAt: /* @__PURE__ */ new Date(),
     conversationState: "awaiting_name",
     conversationLog: log2
-  }).where(eq(missedCalls.id, callId));
+  }).where(eq2(missedCalls.id, callId));
 }
 async function findUsersByTwilioNumber(toPhone) {
   const allSettings = await db.select().from(settings);
@@ -242,6 +319,30 @@ async function findUsersByTwilioNumber(toPhone) {
   }
   return userIds;
 }
+async function handleDemoTrigger(fromPhone, userId) {
+  const { businessName } = await getTwilioConfig(userId);
+  const bizLine = businessName ? `from ${businessName}` : "";
+  const message = `Thanks for your interest! \u{1F64C}
+
+This is the same kind of experience your customers will have when they miss a call from you.
+
+\u{1F3AC} Watch the quick demo: ${DEMO_VIDEO_URL}
+
+Then reply YES if you'd like to book a 10-minute call to answer any questions and get you set up.`;
+  await sendSms(fromPhone, message, userId);
+  const log2 = [{ role: "business", message, timestamp: (/* @__PURE__ */ new Date()).toISOString() }];
+  await db.insert(missedCalls).values({
+    userId,
+    callerName: "Demo Lead",
+    phoneNumber: normalizePhone(fromPhone),
+    replied: true,
+    repliedAt: /* @__PURE__ */ new Date(),
+    conversationState: "demo_offer_sent",
+    conversationLog: log2,
+    selectedService: "TradieCatch Setup"
+  });
+  return message;
+}
 async function handleIncomingReply(fromPhone, body, toPhone) {
   const normalizedPhone = normalizePhone(fromPhone);
   let userIds = [];
@@ -251,12 +352,12 @@ async function handleIncomingReply(fromPhone, body, toPhone) {
   let rows = [];
   if (userIds.length > 0) {
     for (const uid of userIds) {
-      const userRows = await db.select().from(missedCalls).where(and(eq(missedCalls.userId, uid), eq(missedCalls.phoneNumber, normalizedPhone))).orderBy(desc(missedCalls.timestamp));
+      const userRows = await db.select().from(missedCalls).where(and(eq2(missedCalls.userId, uid), eq2(missedCalls.phoneNumber, normalizedPhone))).orderBy(desc(missedCalls.timestamp));
       rows = rows.concat(userRows);
     }
     if (rows.length === 0) {
       for (const uid of userIds) {
-        const allCalls = await db.select().from(missedCalls).where(eq(missedCalls.userId, uid));
+        const allCalls = await db.select().from(missedCalls).where(eq2(missedCalls.userId, uid));
         const matched = allCalls.filter((c) => phonesMatch(c.phoneNumber, normalizedPhone));
         rows = rows.concat(matched);
       }
@@ -267,7 +368,8 @@ async function handleIncomingReply(fromPhone, body, toPhone) {
     rows = allCalls.filter((c) => phonesMatch(c.phoneNumber, normalizedPhone));
   }
   rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  const activeCalls = rows.filter((c) => c.conversationState !== "none" && c.conversationState !== "completed");
+  const TERMINAL_STATES = /* @__PURE__ */ new Set(["none", "completed", "demo_completed"]);
+  const activeCalls = rows.filter((c) => !TERMINAL_STATES.has(c.conversationState));
   let call = activeCalls.length > 0 ? activeCalls[0] : null;
   if (!call) {
     const allByPhone = rows.filter((c) => c.replied);
@@ -393,7 +495,7 @@ What's the address for the job?`;
         updates.callerEmail = reply.toLowerCase();
         const booking = await getBookingConfig(callUserId);
         if (booking.enabled) {
-          const dates = getNextAvailableDates(5);
+          const dates = resolveBookingDates(booking.dates);
           const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
           response = `Thanks! What day works best for you?
 
@@ -413,12 +515,13 @@ ${dateMenu}`;
       break;
     }
     case "awaiting_booking_date": {
-      const dates = getNextAvailableDates(5);
-      const dateChoice = reply.replace(/[^1-5]/g, "");
+      const booking = await getBookingConfig(callUserId);
+      const dates = resolveBookingDates(booking.dates);
+      const maxDate = dates.length;
+      const dateChoice = reply.replace(new RegExp(`[^1-${maxDate}]`, "g"), "");
       const idx = parseInt(dateChoice, 10) - 1;
       if (idx >= 0 && idx < dates.length) {
         updates.selectedTime = dates[idx].label;
-        const booking = await getBookingConfig(callUserId);
         const slotMenu = booking.slots.map((s, i) => `${i + 1}. ${s}`).join("\n");
         response = `Great, ${dates[idx].label}!
 
@@ -466,6 +569,14 @@ We've confirmed your appointment.${call.isUrgent || updates.isUrgent ? "\n\nMark
           missedCallId: call.id,
           isUrgent: call.isUrgent || updates.isUrgent || false
         });
+        const jobName = call.callerName || updates.callerName || "New customer";
+        const jobService = call.selectedService || updates.selectedService || "Job";
+        sendPushToUser(
+          callUserId,
+          `${call.isUrgent || updates.isUrgent ? "\u{1F6A8} Urgent: " : "\u{1F4C5} "}New job booked`,
+          `${jobName} \u2014 ${jobService} on ${dateLabel} at ${timeSlot}`,
+          { type: "job_booked", missedCallId: call.id }
+        );
         updates.jobBooked = true;
       } else {
         const slotMenu = booking.slots.map((s, i) => `${i + 1}. ${s}`).join("\n");
@@ -509,6 +620,14 @@ Our team will confirm your booking shortly.${call.isUrgent || updates.isUrgent ?
         missedCallId: call.id,
         isUrgent: call.isUrgent || updates.isUrgent || false
       });
+      const jobName2 = call.callerName || updates.callerName || "New customer";
+      const jobService2 = call.selectedService || updates.selectedService || "Job";
+      sendPushToUser(
+        callUserId,
+        `${call.isUrgent || updates.isUrgent ? "\u{1F6A8} Urgent: " : "\u{1F4C5} "}New job booked`,
+        `${jobName2} \u2014 ${jobService2} (${timeLabel})`,
+        { type: "job_booked", missedCallId: call.id }
+      );
       updates.jobBooked = true;
       break;
     }
@@ -518,6 +637,142 @@ Our team will confirm your booking shortly.${call.isUrgent || updates.isUrgent ?
 
 - ${businessName}`;
       newState = "completed";
+      break;
+    }
+    // ── Demo / lead generation flow ──────────────────────────────────────────
+    case "demo_offer_sent": {
+      const upper = reply.toUpperCase();
+      if (upper.includes("YES")) {
+        response = `Awesome! \u{1F389}
+
+Grab a 10-minute slot that suits you here:
+
+\u{1F4C5} ${CALENDLY_BOOKING_URL}
+
+Once you've booked I'll send you a confirmation. Talk soon!`;
+        newState = "demo_awaiting_calendly";
+      } else if (body.trim().toLowerCase().includes("demo")) {
+        response = `Here's the demo again \u{1F3AC}
+${DEMO_VIDEO_URL}
+
+Reply YES to grab a 10-minute call and I'll send you the booking link.`;
+        newState = "demo_offer_sent";
+      } else {
+        response = `No worries at all! If you change your mind, just reply YES anytime and I'll send through the booking link. \u{1F60A}`;
+        newState = "demo_completed";
+      }
+      break;
+    }
+    case "demo_awaiting_calendly": {
+      const upper = reply.toUpperCase();
+      if (upper.includes("YES") || body.trim().toLowerCase().includes("link")) {
+        response = `Here's the booking link again:
+
+\u{1F4C5} ${CALENDLY_BOOKING_URL}`;
+        newState = "demo_awaiting_calendly";
+      } else if (body.trim().toLowerCase().includes("demo")) {
+        response = `Here's the demo again \u{1F3AC}
+${DEMO_VIDEO_URL}
+
+And the booking link: \u{1F4C5} ${CALENDLY_BOOKING_URL}`;
+        newState = "demo_awaiting_calendly";
+      } else {
+        response = `No problem! When you're ready, here's the link to book your 10-minute call:
+
+\u{1F4C5} ${CALENDLY_BOOKING_URL}`;
+        newState = "demo_awaiting_calendly";
+      }
+      break;
+    }
+    case "demo_awaiting_date": {
+      const bookingCfg = await getBookingConfig(callUserId);
+      const dates = resolveBookingDates(bookingCfg.dates);
+      const maxIdx = dates.length;
+      const dateChoice = reply.replace(new RegExp(`[^1-${maxIdx}]`, "g"), "");
+      const idx = parseInt(dateChoice, 10) - 1;
+      if (idx >= 0 && idx < dates.length) {
+        updates.selectedTime = dates[idx].label;
+        const timeMenu = DEMO_CALL_TIMES.map((t, i) => `${i + 1}. ${t}`).join("\n");
+        response = `${dates[idx].label} works great!
+
+What time suits you for the 10-minute call?
+
+${timeMenu}`;
+        newState = "demo_awaiting_time";
+      } else {
+        const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+        response = `Please reply with a number:
+
+${dateMenu}`;
+        newState = "demo_awaiting_date";
+      }
+      break;
+    }
+    case "demo_awaiting_time": {
+      const timeIdx = parseInt(reply.replace(/[^0-9]/g, ""), 10) - 1;
+      if (timeIdx >= 0 && timeIdx < DEMO_CALL_TIMES.length) {
+        const timeSlot = DEMO_CALL_TIMES[timeIdx];
+        const dateLabel = call.selectedTime || updates.selectedTime || "";
+        updates.selectedTime = `${dateLabel} ${timeSlot}`;
+        const { businessName } = await getTwilioConfig(callUserId);
+        response = `All booked! \u{1F389}
+
+Your free 10-minute TradieCatch setup call is confirmed for:
+\u{1F4C5} ${dateLabel} at ${timeSlot}
+
+We'll walk you through everything and get you set up. See you then!
+
+- ${businessName || "TradieCatch"}`;
+        newState = "demo_completed";
+        updates.jobBooked = true;
+        const bookingCfgJob = await getBookingConfig(callUserId);
+        const allDates = resolveBookingDates(bookingCfgJob.dates);
+        const matchedDate = allDates.find((d) => d.label === dateLabel);
+        const dateStr = matchedDate?.dateStr || dateLabel;
+        await db.insert(jobs).values({
+          userId: callUserId,
+          callerName: call.callerName || `Demo Lead (${call.phoneNumber})`,
+          phoneNumber: call.phoneNumber,
+          jobType: "TradieCatch Setup Call (Demo)",
+          date: dateStr,
+          time: timeSlot,
+          address: "",
+          notes: "10-min onboarding call booked via SMS demo flow",
+          email: null,
+          status: "confirmed",
+          missedCallId: call.id,
+          isUrgent: false
+        });
+        sendPushToUser(
+          callUserId,
+          "\u{1F3AC} New demo lead booked",
+          `${call.phoneNumber} booked a setup call on ${dateLabel} at ${timeSlot}`,
+          { type: "demo_booked", missedCallId: call.id }
+        );
+      } else {
+        const timeMenu = DEMO_CALL_TIMES.map((t, i) => `${i + 1}. ${t}`).join("\n");
+        response = `Please reply with a number:
+
+${timeMenu}`;
+        newState = "demo_awaiting_time";
+      }
+      break;
+    }
+    case "demo_completed": {
+      if (body.trim().toLowerCase().includes("demo")) {
+        response = `Great to hear from you again! \u{1F60A}
+
+\u{1F3AC} TradieCatch demo: ${DEMO_VIDEO_URL}
+
+Reply YES to book a free 10-minute setup call.`;
+        newState = "demo_offer_sent";
+      } else {
+        const { businessName } = await getTwilioConfig(callUserId);
+        response = `Your setup call is already booked \u2014 we'll be in touch! \u{1F64C}
+
+- ${businessName || "TradieCatch"}`;
+        newState = "demo_completed";
+      }
       break;
     }
     default: {
@@ -532,7 +787,157 @@ Our team will confirm your booking shortly.${call.isUrgent || updates.isUrgent ?
     ...updates,
     conversationState: newState,
     conversationLog: log2
-  }).where(eq(missedCalls.id, call.id));
+  }).where(eq2(missedCalls.id, call.id));
+  return response;
+}
+async function handleDemoSmsFlow(fromPhone, body, toPhone) {
+  const normalizedFrom = normalizePhone(fromPhone);
+  const userIds = await findUsersByTwilioNumber(toPhone);
+  if (userIds.length === 0) {
+    console.log(`Demo flow: no user found for toPhone ${toPhone}`);
+    return null;
+  }
+  const userId = userIds[0];
+  const allCalls = await db.select().from(missedCalls).where(eq2(missedCalls.userId, userId)).orderBy(desc(missedCalls.timestamp));
+  const callerCalls = allCalls.filter((c) => phonesMatch(c.phoneNumber, normalizedFrom));
+  const DEMO_ACTIVE_STATES = /* @__PURE__ */ new Set(["demo_offer_sent", "demo_awaiting_date", "demo_awaiting_time"]);
+  const activeDemo = callerCalls.find((c) => DEMO_ACTIVE_STATES.has(c.conversationState)) || null;
+  const completedDemo = callerCalls.find((c) => c.conversationState === "demo_completed") || null;
+  if (!activeDemo && !completedDemo) {
+    if (body.trim().toLowerCase().includes("demo")) {
+      console.log(`Demo flow: new contact from ${fromPhone} \u2014 sending offer`);
+      return await handleDemoTrigger(fromPhone, userId);
+    }
+    const { businessName } = await getTwilioConfig(userId);
+    const nudge = `Hi! \u{1F44B} Text the word DEMO to see how TradieCatch works and book a free 10-minute setup call.
+
+- ${businessName || "TradieCatch"}`;
+    await sendSms(fromPhone, nudge, userId);
+    return nudge;
+  }
+  const call = activeDemo || completedDemo;
+  const reply = body.trim();
+  let log2 = call.conversationLog || [];
+  addLogEntry(log2, "customer", reply);
+  let response = "";
+  let newState = call.conversationState;
+  let updates = {};
+  switch (call.conversationState) {
+    case "demo_offer_sent": {
+      const upper = reply.toUpperCase();
+      if (upper.includes("YES")) {
+        const bookingCfgOffer = await getBookingConfig(userId);
+        const dates = resolveBookingDates(bookingCfgOffer.dates);
+        const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+        response = `Awesome! Let's get you booked in for a free 10-minute setup call.
+
+What day works best for you?
+
+${dateMenu}`;
+        newState = "demo_awaiting_date";
+      } else {
+        response = `Here's the TradieCatch demo \u{1F3AC}
+${DEMO_VIDEO_URL}
+
+Reply YES to book your free 10-minute setup call.`;
+        newState = "demo_offer_sent";
+      }
+      break;
+    }
+    case "demo_awaiting_date": {
+      const bookingCfg = await getBookingConfig(userId);
+      const dates = resolveBookingDates(bookingCfg.dates);
+      const maxIdx = dates.length;
+      const dateChoice = reply.replace(new RegExp(`[^1-${maxIdx}]`, "g"), "");
+      const idx = parseInt(dateChoice, 10) - 1;
+      if (idx >= 0 && idx < dates.length) {
+        updates.selectedTime = dates[idx].label;
+        const timeMenu = DEMO_CALL_TIMES.map((t, i) => `${i + 1}. ${t}`).join("\n");
+        response = `${dates[idx].label} works great!
+
+What time suits you for the 10-minute call?
+
+${timeMenu}`;
+        newState = "demo_awaiting_time";
+      } else {
+        const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+        response = `Please reply with a number:
+
+${dateMenu}`;
+        newState = "demo_awaiting_date";
+      }
+      break;
+    }
+    case "demo_awaiting_time": {
+      const timeIdx = parseInt(reply.replace(/[^0-9]/g, ""), 10) - 1;
+      if (timeIdx >= 0 && timeIdx < DEMO_CALL_TIMES.length) {
+        const timeSlot = DEMO_CALL_TIMES[timeIdx];
+        const dateLabel = call.selectedTime || updates.selectedTime || "";
+        updates.selectedTime = `${dateLabel} ${timeSlot}`;
+        const { businessName } = await getTwilioConfig(userId);
+        response = `All booked! \u{1F389}
+
+Your free 10-minute TradieCatch setup call is confirmed for:
+\u{1F4C5} ${dateLabel} at ${timeSlot}
+
+We'll walk you through everything and get you set up. See you then!
+
+- ${businessName || "TradieCatch"}`;
+        newState = "demo_completed";
+        updates.jobBooked = true;
+        const bookingCfgJob = await getBookingConfig(userId);
+        const allDates = resolveBookingDates(bookingCfgJob.dates);
+        const matchedDate = allDates.find((d) => d.label === dateLabel);
+        const dateStr = matchedDate?.dateStr || dateLabel;
+        await db.insert(jobs).values({
+          userId,
+          callerName: call.callerName || `Demo Lead (${call.phoneNumber})`,
+          phoneNumber: call.phoneNumber,
+          jobType: "TradieCatch Setup Call (Demo)",
+          date: dateStr,
+          time: timeSlot,
+          address: "",
+          notes: "10-min onboarding call booked via SMS demo flow",
+          email: null,
+          status: "confirmed",
+          missedCallId: call.id,
+          isUrgent: false
+        });
+        sendPushToUser(
+          userId,
+          "\u{1F3AC} New demo lead booked",
+          `${call.phoneNumber} booked a setup call on ${dateLabel} at ${timeSlot}`,
+          { type: "demo_booked", missedCallId: call.id }
+        );
+      } else {
+        const timeMenu = DEMO_CALL_TIMES.map((t, i) => `${i + 1}. ${t}`).join("\n");
+        response = `Please reply with a number:
+
+${timeMenu}`;
+        newState = "demo_awaiting_time";
+      }
+      break;
+    }
+    case "demo_completed":
+    default: {
+      response = `Great to hear from you! \u{1F60A}
+
+\u{1F3AC} TradieCatch demo: ${DEMO_VIDEO_URL}
+
+Reply YES to book a new free 10-minute setup call.`;
+      newState = "demo_offer_sent";
+      break;
+    }
+  }
+  if (response) {
+    addLogEntry(log2, "business", response);
+    await sendSms(fromPhone, response, userId);
+  }
+  await db.update(missedCalls).set({
+    ...updates,
+    conversationState: newState,
+    conversationLog: log2
+  }).where(eq2(missedCalls.id, call.id));
   return response;
 }
 function normalizePhone(phone) {
@@ -552,11 +957,35 @@ function phonesMatch(a, b) {
   }
   return false;
 }
+var DEMO_VIDEO_URL, CALENDLY_BOOKING_URL, DEMO_CALL_TIMES;
+var init_sms_conversation = __esm({
+  "server/sms-conversation.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+    init_push();
+    DEMO_VIDEO_URL = "https://canva.link/v768gnwipa4gcig";
+    CALENDLY_BOOKING_URL = "https://calendly.com/amywickham-dgbh/video-session-1hr-apple-devices";
+    DEMO_CALL_TIMES = ["9:00 AM", "10:00 AM", "11:00 AM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
+  }
+});
+
+// server/index.ts
+import express from "express";
+
+// server/routes.ts
+init_db();
+init_schema();
+init_sms_conversation();
+import { createServer } from "node:http";
+import { eq as eq4, desc as desc2, and as and2, not } from "drizzle-orm";
 
 // server/auth.ts
+init_db();
+init_schema();
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { eq as eq2 } from "drizzle-orm";
+import { eq as eq3 } from "drizzle-orm";
 var JWT_SECRET = process.env.JWT_SECRET || "tradiecatch-jwt-secret-change-in-production";
 var JWT_EXPIRES_IN = "30d";
 function generateToken(userId) {
@@ -571,11 +1000,11 @@ async function register(req, res) {
     return res.status(400).json({ error: "Password must be at least 6 characters" });
   }
   try {
-    const existingEmail = await db.select().from(users).where(eq2(users.email, email.toLowerCase().trim()));
+    const existingEmail = await db.select().from(users).where(eq3(users.email, email.toLowerCase().trim()));
     if (existingEmail.length > 0) {
       return res.status(400).json({ error: "An account with this email already exists" });
     }
-    const existingUsername = await db.select().from(users).where(eq2(users.username, username.trim()));
+    const existingUsername = await db.select().from(users).where(eq3(users.username, username.trim()));
     if (existingUsername.length > 0) {
       return res.status(400).json({ error: "This username is already taken" });
     }
@@ -618,7 +1047,7 @@ async function login(req, res) {
     return res.status(400).json({ error: "Email and password are required" });
   }
   try {
-    const [user] = await db.select().from(users).where(eq2(users.email, email.toLowerCase().trim()));
+    const [user] = await db.select().from(users).where(eq3(users.email, email.toLowerCase().trim()));
     if (!user) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
@@ -638,7 +1067,7 @@ async function login(req, res) {
 }
 async function getMe(req, res) {
   try {
-    const [user] = await db.select().from(users).where(eq2(users.id, req.userId));
+    const [user] = await db.select().from(users).where(eq3(users.id, req.userId));
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -738,6 +1167,27 @@ async function registerRoutes(app2) {
   app2.post("/api/auth/register", register);
   app2.post("/api/auth/login", login);
   app2.get("/api/auth/me", requireAuth, getMe);
+  app2.post("/api/push-token", requireAuth, async (req, res) => {
+    try {
+      const { token } = req.body || {};
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ error: "Missing token" });
+      }
+      await db.update(users).set({ pushToken: token }).where(eq4(users.id, req.userId));
+      res.json({ success: true });
+    } catch (err) {
+      console.error("push-token error", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+  app2.delete("/api/push-token", requireAuth, async (req, res) => {
+    try {
+      await db.update(users).set({ pushToken: null }).where(eq4(users.id, req.userId));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
   app2.get("/api/debug/twilio-numbers", async (_req, res) => {
     try {
       const allSettings = await db.select({
@@ -782,7 +1232,7 @@ async function registerRoutes(app2) {
     });
   });
   app2.get("/api/missed-calls", requireAuth, async (req, res) => {
-    const rows = await db.select().from(missedCalls).where(eq3(missedCalls.userId, req.userId)).orderBy(desc2(missedCalls.timestamp));
+    const rows = await db.select().from(missedCalls).where(eq4(missedCalls.userId, req.userId)).orderBy(desc2(missedCalls.timestamp));
     res.json(rows);
   });
   app2.post("/api/missed-calls", requireAuth, async (req, res) => {
@@ -806,7 +1256,7 @@ async function registerRoutes(app2) {
   app2.delete("/api/missed-calls/:id", requireAuth, async (req, res) => {
     const id = paramId(req);
     await db.delete(missedCalls).where(
-      and2(eq3(missedCalls.id, id), eq3(missedCalls.userId, req.userId))
+      and2(eq4(missedCalls.id, id), eq4(missedCalls.userId, req.userId))
     );
     res.json({ ok: true });
   });
@@ -814,11 +1264,11 @@ async function registerRoutes(app2) {
     const id = paramId(req);
     try {
       const [call] = await db.select().from(missedCalls).where(
-        and2(eq3(missedCalls.id, id), eq3(missedCalls.userId, req.userId))
+        and2(eq4(missedCalls.id, id), eq4(missedCalls.userId, req.userId))
       );
       if (!call) return res.status(404).json({ error: "Call not found" });
       await sendInitialMissedCallSms(id, req.userId);
-      const [updated] = await db.select().from(missedCalls).where(eq3(missedCalls.id, id));
+      const [updated] = await db.select().from(missedCalls).where(eq4(missedCalls.id, id));
       res.json(updated);
     } catch (err) {
       console.error("Send SMS error:", err);
@@ -828,10 +1278,107 @@ async function registerRoutes(app2) {
   app2.get("/api/missed-calls/:id", requireAuth, async (req, res) => {
     const id = paramId(req);
     const [call] = await db.select().from(missedCalls).where(
-      and2(eq3(missedCalls.id, id), eq3(missedCalls.userId, req.userId))
+      and2(eq4(missedCalls.id, id), eq4(missedCalls.userId, req.userId))
     );
     if (!call) return res.status(404).json({ error: "Not found" });
     res.json(call);
+  });
+  app2.post("/api/calendly/webhook-disabled", async (req, res) => {
+    try {
+      const { sendSms: sendSms2 } = await Promise.resolve().then(() => (init_sms_conversation(), sms_conversation_exports));
+      const event = req.body?.event || "";
+      const payload = req.body?.payload || {};
+      console.log(`Calendly webhook event: ${event}`);
+      if (event !== "invitee.created") {
+        return res.status(200).json({ ok: true, ignored: event });
+      }
+      const inviteeName = payload?.name || payload?.invitee?.name || "there";
+      const startTimeRaw = payload?.scheduled_event?.start_time || payload?.event?.start_time || "";
+      const eventName = payload?.scheduled_event?.name || payload?.event_type?.name || "your TradieCatch call";
+      let invPhone = payload?.text_reminder_number || payload?.invitee?.text_reminder_number || "";
+      const qa = payload?.questions_and_answers || payload?.invitee?.questions_and_answers || [];
+      if (!invPhone && Array.isArray(qa)) {
+        for (const item of qa) {
+          const ans = String(item?.answer || "");
+          const m = ans.match(/\+?\d[\d\s\-().]{6,}/);
+          if (m) {
+            invPhone = m[0];
+            break;
+          }
+        }
+      }
+      let timeLabel = "";
+      if (startTimeRaw) {
+        try {
+          const d = new Date(startTimeRaw);
+          timeLabel = d.toLocaleString("en-AU", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+            timeZone: "Australia/Sydney"
+          });
+        } catch {
+          timeLabel = startTimeRaw;
+        }
+      }
+      const candidateStates = ["demo_awaiting_calendly", "demo_offer_sent"];
+      let targetCall = null;
+      if (invPhone) {
+        const normalize = (p) => p.replace(/[^\d+]/g, "");
+        const target = normalize(invPhone);
+        const all = await db.select().from(missedCalls);
+        const matched = all.filter((c) => candidateStates.includes(c.conversationState)).filter((c) => {
+          const a = normalize(c.phoneNumber);
+          return a.endsWith(target.slice(-9)) || target.endsWith(a.slice(-9));
+        }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        targetCall = matched[0] || null;
+      }
+      if (!targetCall) {
+        const cutoff = Date.now() - 24 * 60 * 60 * 1e3;
+        const all = await db.select().from(missedCalls);
+        const recent = all.filter((c) => c.conversationState === "demo_awaiting_calendly").filter((c) => new Date(c.timestamp).getTime() > cutoff).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        targetCall = recent[0] || null;
+      }
+      if (!targetCall) {
+        console.log("Calendly webhook: no matching demo conversation found");
+        return res.status(200).json({ ok: true, matched: false });
+      }
+      const confirmation = `\u{1F389} You're all booked, ${inviteeName.split(" ")[0]}!
+
+${timeLabel ? `\u{1F4C5} ${timeLabel}
+
+` : ""}I'll see you on the call. If anything changes you can reschedule from your Calendly confirmation email.
+
+\u2014 Amy, TradieCatch`;
+      await sendSms2(targetCall.phoneNumber, confirmation, targetCall.userId);
+      const log2 = targetCall.conversationLog || [];
+      log2.push({ role: "business", message: confirmation, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+      await db.update(missedCalls).set({
+        conversationState: "demo_completed",
+        conversationLog: log2
+      }).where(eq4(missedCalls.id, targetCall.id));
+      await db.insert(jobs).values({
+        userId: targetCall.userId,
+        callerName: inviteeName || targetCall.callerName || `Demo Lead (${targetCall.phoneNumber})`,
+        phoneNumber: targetCall.phoneNumber,
+        jobType: "TradieCatch Setup Call (Calendly)",
+        date: startTimeRaw ? startTimeRaw.slice(0, 10) : "",
+        time: timeLabel,
+        address: "",
+        notes: `Booked via Calendly: ${eventName}`,
+        email: payload?.email || payload?.invitee?.email || null,
+        status: "confirmed",
+        missedCallId: targetCall.id,
+        isUrgent: false
+      });
+      res.status(200).json({ ok: true, matched: true });
+    } catch (err) {
+      console.error("Calendly webhook error:", err);
+      res.status(200).json({ ok: false });
+    }
   });
   app2.post("/api/twilio/webhook", async (req, res) => {
     const from = req.body.From || "";
@@ -852,93 +1399,121 @@ async function registerRoutes(app2) {
     const callStatus = req.body.CallStatus || "";
     const callerName = req.body.CallerName || "Unknown Caller";
     console.log(`Incoming call from ${from} to ${to} (status: ${callStatus}, name: ${callerName})`);
-    let userId = null;
-    let settingsRow = null;
+    let settingsRow = await resolveOwnerSettings(to, from);
+    if (!settingsRow) {
+      console.log(`No user found for Twilio number: ${to}`);
+      res.set("Content-Type", "text/xml");
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice">Sorry, this number is not configured.</Say><Hangup/></Response>`);
+      return;
+    }
+    const userId = settingsRow.userId;
+    console.log(`Resolved to user ${userId} for Twilio number ${to}`);
+    const baseUrl = getPublicBaseUrl(req);
+    const mode = settingsRow.forwardingMode || "carrier_forward";
+    const tradieMobile = (settingsRow.tradieMobileNumber || "").trim();
+    res.set("Content-Type", "text/xml");
+    if (mode === "twilio_dial" && tradieMobile) {
+      const actionUrl = `${baseUrl}/api/twilio/dial-result?ownerUserId=${encodeURIComponent(userId)}&caller=${encodeURIComponent(from)}&callerName=${encodeURIComponent(callerName)}`;
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial action="${actionUrl}" method="POST" timeout="20" callerId="${to}">
+    <Number>${tradieMobile}</Number>
+  </Dial>
+</Response>`);
+      return;
+    }
+    await handleMissedCallAndRespond(req, res, userId, settingsRow, from, callerName, baseUrl);
+  });
+  app2.post("/api/twilio/dial-result", async (req, res) => {
+    const dialStatus = req.body.DialCallStatus || "";
+    const ownerUserId = req.query.ownerUserId || "";
+    const caller = req.query.caller || req.body.From || "";
+    const callerName = req.query.callerName || "Unknown Caller";
+    console.log(`Dial result: ${dialStatus} for owner ${ownerUserId}, caller ${caller}`);
+    res.set("Content-Type", "text/xml");
+    if (dialStatus === "completed" || dialStatus === "answered") {
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
+      return;
+    }
+    const [settingsRow] = await db.select().from(settings).where(eq4(settings.userId, ownerUserId));
+    if (!settingsRow) {
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
+      return;
+    }
+    const baseUrl = getPublicBaseUrl(req);
+    await handleMissedCallAndRespond(req, res, ownerUserId, settingsRow, caller, callerName, baseUrl);
+  });
+  app2.post("/api/twilio/recording-callback", async (req, res) => {
+    res.status(200).send("ok");
     try {
-      const allSettings = await db.select().from(settings);
-      const configuredNumbers = allSettings.filter((s) => s.twilioPhoneNumber).map((s) => s.twilioPhoneNumber);
-      console.log(`Looking for Twilio number ${to} among configured numbers: ${JSON.stringify(configuredNumbers)}`);
-      const matchingSettings = allSettings.filter((s) => {
-        const twilioNum = s.twilioPhoneNumber || "";
-        return twilioNum && phonesMatchSimple(twilioNum, to);
-      });
-      if (matchingSettings.length === 0) {
-        console.log(`No user found for Twilio number: ${to}`);
-        res.set("Content-Type", "text/xml");
-        res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice">Sorry, this number is not configured.</Say><Hangup/></Response>`);
+      const missedCallId = req.query.missedCallId || "";
+      const recordingUrl = req.body.RecordingUrl || "";
+      const recordingDuration = req.body.RecordingDuration || "0";
+      console.log(`Recording callback: missedCallId=${missedCallId}, url=${recordingUrl}, duration=${recordingDuration}s`);
+      if (!missedCallId || !recordingUrl) return;
+      const [call] = await db.select().from(missedCalls).where(eq4(missedCalls.id, missedCallId));
+      if (!call) {
+        console.log("Recording callback: missed call not found");
         return;
       }
-      if (matchingSettings.length === 1) {
-        settingsRow = matchingSettings[0];
-      } else {
-        const scored = matchingSettings.map((s) => {
-          let score = 0;
-          if (s.businessName && s.businessName.trim()) score += 2;
-          const svcList = s.services;
-          if (Array.isArray(svcList) && svcList.length > 0) score += 1;
-          return { s, score };
-        }).sort((a, b) => b.score - a.score);
-        const topScore = scored[0].score;
-        const topCandidates = scored.filter((x) => x.score === topScore).map((x) => x.s);
-        if (topCandidates.length === 1) {
-          settingsRow = topCandidates[0];
-        } else {
-          const recentCalls = await db.select().from(missedCalls).where(eq3(missedCalls.phoneNumber, from)).orderBy(desc2(missedCalls.timestamp)).limit(1);
-          if (recentCalls.length > 0) {
-            const match = topCandidates.find((s) => s.userId === recentCalls[0].userId);
-            settingsRow = match || topCandidates[0];
-          } else {
-            settingsRow = topCandidates[0];
-          }
-        }
+      const [settingsRow] = await db.select().from(settings).where(eq4(settings.userId, call.userId));
+      if (!settingsRow) {
+        console.log("Recording callback: settings not found");
+        return;
       }
-      userId = settingsRow.userId;
-      console.log(`Resolved to user ${userId} for Twilio number ${to}`);
-      const existingCalls = await db.select().from(missedCalls).where(and2(eq3(missedCalls.userId, userId), eq3(missedCalls.phoneNumber, from))).orderBy(desc2(missedCalls.timestamp)).limit(1);
-      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1e3);
-      const isDuplicate = existingCalls.length > 0 && new Date(existingCalls[0].timestamp) > fiveMinAgo;
-      if (!isDuplicate) {
-        const [newCall] = await db.insert(missedCalls).values({
-          userId,
-          callerName: callerName || "Unknown Caller",
-          phoneNumber: from,
-          timestamp: /* @__PURE__ */ new Date()
-        }).returning();
-        console.log(`Missed call logged for user ${userId}: ${from} (id: ${newCall.id})`);
-        if (settingsRow?.autoReplyEnabled) {
-          try {
-            await sendInitialMissedCallSms(newCall.id, userId);
-            console.log(`Auto-reply SMS sent for call ${newCall.id}`);
-          } catch (smsErr) {
-            console.error("Auto-reply SMS failed:", smsErr);
-          }
+      const sid = settingsRow.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "";
+      const token = settingsRow.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "";
+      const authHeader = "Basic " + Buffer.from(`${sid}:${token}`).toString("base64");
+      const audioRes = await fetch(`${recordingUrl}.mp3`, { headers: { Authorization: authHeader } });
+      if (!audioRes.ok) {
+        console.error(`Failed to download recording: ${audioRes.status}`);
+        return;
+      }
+      const audioBuf = Buffer.from(await audioRes.arrayBuffer());
+      const audioB64 = audioBuf.toString("base64");
+      await db.update(missedCalls).set({
+        voicemailData: audioB64,
+        voicemailMimeType: "audio/mpeg",
+        voicemailDurationSeconds: String(recordingDuration)
+      }).where(eq4(missedCalls.id, missedCallId));
+      console.log(`Voicemail saved for call ${missedCallId} (${audioBuf.length} bytes)`);
+      const tradieMobile = (settingsRow.tradieMobileNumber || "").trim();
+      if (tradieMobile) {
+        const baseUrl = getPublicBaseUrl(req);
+        const playUrl = `${baseUrl}/api/voicemail/${missedCallId}`;
+        const { sendSms: sendSms2 } = await Promise.resolve().then(() => (init_sms_conversation(), sms_conversation_exports));
+        const callerLabel = call.callerName && call.callerName !== "Unknown Caller" ? call.callerName : call.phoneNumber;
+        const msg = `\u{1F4E9} New voicemail from ${callerLabel} (${recordingDuration}s).
+
+\u25B6\uFE0F Listen: ${playUrl}`;
+        try {
+          await sendSms2(tradieMobile, msg, call.userId);
+          console.log(`Voicemail SMS sent to tradie ${tradieMobile}`);
+        } catch (smsErr) {
+          console.error("Voicemail-to-tradie SMS failed:", smsErr);
         }
       } else {
-        console.log(`Duplicate call from ${from} within 5 minutes, skipping.`);
+        console.log("No tradie mobile configured \u2014 skipping voicemail SMS forward");
       }
     } catch (err) {
-      console.error("Voice webhook error:", err);
+      console.error("Recording callback error:", err);
     }
-    const businessName = settingsRow?.businessName || "us";
-    const voiceMessage = (settingsRow?.missedCallVoiceMessage || "Sorry we missed your call. We will SMS you now to follow up.").trim();
-    const hasRecording = !!(settingsRow?.voiceRecordingData && settingsRow?.voiceRecordingMimeType);
-    const domains = process.env.REPLIT_DOMAINS || "";
-    const deploymentDomain = process.env.DEPLOYMENT_DOMAIN || domains.split(",").find((d) => d.trim().endsWith(".replit.app"))?.trim() || "";
-    const baseUrl = deploymentDomain ? `https://${deploymentDomain}` : `${req.protocol}://${req.get("host")}`;
-    const recordingUrl = hasRecording && settingsRow?.userId ? `${baseUrl}/api/voice-recording/${settingsRow.userId}` : null;
-    res.set("Content-Type", "text/xml");
-    if (recordingUrl) {
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Play>${recordingUrl}</Play>
-  <Hangup/>
-</Response>`);
-    } else {
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">${voiceMessage} Thanks for calling ${businessName}.</Say>
-  <Hangup/>
-</Response>`);
+  });
+  app2.get("/api/voicemail/:id", async (req, res) => {
+    try {
+      const id = req.params.id;
+      const [call] = await db.select().from(missedCalls).where(eq4(missedCalls.id, id));
+      if (!call?.voicemailData) {
+        return res.status(404).send("Voicemail not found");
+      }
+      const buf = Buffer.from(call.voicemailData, "base64");
+      res.set("Content-Type", call.voicemailMimeType || "audio/mpeg");
+      res.set("Content-Length", buf.length.toString());
+      res.set("Cache-Control", "private, max-age=86400");
+      res.send(buf);
+    } catch (err) {
+      console.error("Serve voicemail error:", err);
+      res.status(500).send("Error");
     }
   });
   app2.get("/api/voice-recording/:userId", async (req, res) => {
@@ -947,7 +1522,7 @@ async function registerRoutes(app2) {
       const [row] = await db.select({
         voiceRecordingData: settings.voiceRecordingData,
         voiceRecordingMimeType: settings.voiceRecordingMimeType
-      }).from(settings).where(eq3(settings.userId, userId));
+      }).from(settings).where(eq4(settings.userId, userId));
       if (!row?.voiceRecordingData) {
         return res.status(404).json({ error: "No recording found" });
       }
@@ -975,7 +1550,7 @@ async function registerRoutes(app2) {
       const [row] = await db.update(settings).set({
         voiceRecordingData: audioBase64,
         voiceRecordingMimeType: mimeType || "audio/mp4"
-      }).where(eq3(settings.userId, req.userId)).returning();
+      }).where(eq4(settings.userId, req.userId)).returning();
       res.json({ ok: true, size: buffer.length });
     } catch (err) {
       console.error("Upload voice recording error:", err);
@@ -984,7 +1559,7 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/settings/voice-recording", requireAuth, async (req, res) => {
     try {
-      await db.update(settings).set({ voiceRecordingData: null, voiceRecordingMimeType: null }).where(eq3(settings.userId, req.userId));
+      await db.update(settings).set({ voiceRecordingData: null, voiceRecordingMimeType: null }).where(eq4(settings.userId, req.userId));
       res.json({ ok: true });
     } catch (err) {
       console.error("Delete voice recording error:", err);
@@ -992,7 +1567,7 @@ async function registerRoutes(app2) {
     }
   });
   app2.get("/api/jobs", requireAuth, async (req, res) => {
-    const rows = await db.select().from(jobs).where(eq3(jobs.userId, req.userId)).orderBy(desc2(jobs.createdAt));
+    const rows = await db.select().from(jobs).where(eq4(jobs.userId, req.userId)).orderBy(desc2(jobs.createdAt));
     res.json(rows);
   });
   app2.post("/api/jobs", requireAuth, async (req, res) => {
@@ -1012,7 +1587,7 @@ async function registerRoutes(app2) {
     }).returning();
     if (missedCallId) {
       await db.update(missedCalls).set({ jobBooked: true }).where(
-        and2(eq3(missedCalls.id, missedCallId), eq3(missedCalls.userId, req.userId))
+        and2(eq4(missedCalls.id, missedCallId), eq4(missedCalls.userId, req.userId))
       );
     }
     res.json(job);
@@ -1020,19 +1595,19 @@ async function registerRoutes(app2) {
   app2.patch("/api/jobs/:id", requireAuth, async (req, res) => {
     const id = paramId(req);
     const [job] = await db.update(jobs).set(req.body).where(
-      and2(eq3(jobs.id, id), eq3(jobs.userId, req.userId))
+      and2(eq4(jobs.id, id), eq4(jobs.userId, req.userId))
     ).returning();
     res.json(job);
   });
   app2.delete("/api/jobs/:id", requireAuth, async (req, res) => {
     const id = paramId(req);
     await db.delete(jobs).where(
-      and2(eq3(jobs.id, id), eq3(jobs.userId, req.userId))
+      and2(eq4(jobs.id, id), eq4(jobs.userId, req.userId))
     );
     res.json({ ok: true });
   });
   app2.get("/api/services", requireAuth, async (req, res) => {
-    const [row] = await db.select().from(settings).where(eq3(settings.userId, req.userId));
+    const [row] = await db.select().from(settings).where(eq4(settings.userId, req.userId));
     const services = row?.services || DEFAULT_SERVICES;
     res.json(services);
   });
@@ -1042,21 +1617,21 @@ async function registerRoutes(app2) {
       return res.status(400).json({ error: "Services must be a non-empty array" });
     }
     const cleaned = newServices.map((s) => s.trim()).filter((s) => s.length > 0);
-    const [row] = await db.update(settings).set({ services: cleaned }).where(eq3(settings.userId, req.userId)).returning();
+    const [row] = await db.update(settings).set({ services: cleaned }).where(eq4(settings.userId, req.userId)).returning();
     res.json(row.services || cleaned);
   });
   app2.get("/api/settings", requireAuth, async (req, res) => {
-    const [row] = await db.select().from(settings).where(eq3(settings.userId, req.userId));
+    const [row] = await db.select().from(settings).where(eq4(settings.userId, req.userId));
     res.json(row || { id: "default", userId: req.userId, businessName: "", autoReplyEnabled: true, services: DEFAULT_SERVICES });
   });
   app2.patch("/api/settings", requireAuth, async (req, res) => {
     if (req.body.twilioPhoneNumber && req.body.twilioPhoneNumber.trim()) {
       await db.update(settings).set({ twilioPhoneNumber: "" }).where(and2(
-        eq3(settings.twilioPhoneNumber, req.body.twilioPhoneNumber.trim()),
-        not(eq3(settings.userId, req.userId))
+        eq4(settings.twilioPhoneNumber, req.body.twilioPhoneNumber.trim()),
+        not(eq4(settings.userId, req.userId))
       ));
     }
-    const existing = await db.select().from(settings).where(eq3(settings.userId, req.userId));
+    const existing = await db.select().from(settings).where(eq4(settings.userId, req.userId));
     if (existing.length === 0) {
       const [row2] = await db.insert(settings).values({
         userId: req.userId,
@@ -1065,11 +1640,11 @@ async function registerRoutes(app2) {
       }).returning();
       return res.json(row2);
     }
-    const [row] = await db.update(settings).set(req.body).where(eq3(settings.userId, req.userId)).returning();
+    const [row] = await db.update(settings).set(req.body).where(eq4(settings.userId, req.userId)).returning();
     res.json(row);
   });
   app2.get("/api/templates", requireAuth, async (req, res) => {
-    const rows = await db.select().from(smsTemplates).where(eq3(smsTemplates.userId, req.userId));
+    const rows = await db.select().from(smsTemplates).where(eq4(smsTemplates.userId, req.userId));
     res.json(rows);
   });
   app2.post("/api/templates", requireAuth, async (req, res) => {
@@ -1084,24 +1659,24 @@ async function registerRoutes(app2) {
   app2.patch("/api/templates/:id", requireAuth, async (req, res) => {
     const id = paramId(req);
     const [template] = await db.update(smsTemplates).set(req.body).where(
-      and2(eq3(smsTemplates.id, id), eq3(smsTemplates.userId, req.userId))
+      and2(eq4(smsTemplates.id, id), eq4(smsTemplates.userId, req.userId))
     ).returning();
     res.json(template);
   });
   app2.delete("/api/templates/:id", requireAuth, async (req, res) => {
     const id = paramId(req);
     await db.delete(smsTemplates).where(
-      and2(eq3(smsTemplates.id, id), eq3(smsTemplates.userId, req.userId))
+      and2(eq4(smsTemplates.id, id), eq4(smsTemplates.userId, req.userId))
     );
     res.json({ ok: true });
   });
   app2.post("/api/templates/:id/set-default", requireAuth, async (req, res) => {
     const id = paramId(req);
     await db.update(smsTemplates).set({ isDefault: false }).where(
-      and2(eq3(smsTemplates.isDefault, true), eq3(smsTemplates.userId, req.userId))
+      and2(eq4(smsTemplates.isDefault, true), eq4(smsTemplates.userId, req.userId))
     );
     const [template] = await db.update(smsTemplates).set({ isDefault: true }).where(
-      and2(eq3(smsTemplates.id, id), eq3(smsTemplates.userId, req.userId))
+      and2(eq4(smsTemplates.id, id), eq4(smsTemplates.userId, req.userId))
     ).returning();
     res.json(template);
   });
@@ -1109,7 +1684,7 @@ async function registerRoutes(app2) {
     try {
       const stripe = await getUncachableStripeClient();
       const userId = req.userId;
-      const [user] = await db.select().from(users).where(eq3(users.id, userId));
+      const [user] = await db.select().from(users).where(eq4(users.id, userId));
       if (!user) return res.status(404).json({ error: "User not found" });
       let customerId = user.stripeCustomerId;
       if (!customerId) {
@@ -1117,7 +1692,7 @@ async function registerRoutes(app2) {
           email: user.email,
           metadata: { userId }
         });
-        await db.update(users).set({ stripeCustomerId: customer.id }).where(eq3(users.id, userId));
+        await db.update(users).set({ stripeCustomerId: customer.id }).where(eq4(users.id, userId));
         customerId = customer.id;
       }
       const stripeProducts = await stripe.products.search({ query: "name:'TradieCatch Pro' AND active:'true'" });
@@ -1137,10 +1712,24 @@ async function registerRoutes(app2) {
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ["card"],
-        line_items: [{ price: priceId, quantity: 1 }],
+        line_items: [
+          { price: priceId, quantity: 1 },
+          {
+            quantity: 1,
+            price_data: {
+              currency: "aud",
+              product_data: {
+                name: "TradieCatch Setup Fee",
+                description: "One-time setup & onboarding (charged today). $99/month subscription begins after 30 days."
+              },
+              unit_amount: 29900
+            }
+          }
+        ],
         mode: "subscription",
         subscription_data: {
-          trial_period_days: 7
+          trial_period_days: 30,
+          description: "TradieCatch Pro \u2014 $99/month begins after 30-day setup period"
         },
         success_url: `${baseUrl}/api/stripe/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/api/stripe/checkout-cancel`
@@ -1160,7 +1749,7 @@ async function registerRoutes(app2) {
       if (session.customer && session.subscription) {
         const customerId = typeof session.customer === "string" ? session.customer : session.customer.id;
         const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
-        await db.update(users).set({ stripeSubscriptionId: subscriptionId }).where(eq3(users.stripeCustomerId, customerId));
+        await db.update(users).set({ stripeSubscriptionId: subscriptionId }).where(eq4(users.stripeCustomerId, customerId));
       }
     } catch (err) {
       console.error("Error processing checkout success:", err);
@@ -1181,7 +1770,7 @@ async function registerRoutes(app2) {
   app2.get("/api/stripe/subscription-status", requireAuth, async (req, res) => {
     try {
       const userId = req.userId;
-      const [user] = await db.select().from(users).where(eq3(users.id, userId));
+      const [user] = await db.select().from(users).where(eq4(users.id, userId));
       if (user?.email === "admin@tradiecatch.com") {
         return res.json({
           active: true,
@@ -1209,7 +1798,7 @@ async function registerRoutes(app2) {
         return res.json({ active: false, subscription: null });
       }
       if (user.stripeSubscriptionId !== activeSub.id) {
-        await db.update(users).set({ stripeSubscriptionId: activeSub.id }).where(eq3(users.id, userId));
+        await db.update(users).set({ stripeSubscriptionId: activeSub.id }).where(eq4(users.id, userId));
       }
       return res.json({
         active: true,
@@ -1228,7 +1817,7 @@ async function registerRoutes(app2) {
   app2.post("/api/stripe/customer-portal", requireAuth, async (req, res) => {
     try {
       const userId = req.userId;
-      const [user] = await db.select().from(users).where(eq3(users.id, userId));
+      const [user] = await db.select().from(users).where(eq4(users.id, userId));
       if (!user?.stripeCustomerId) {
         return res.status(400).json({ error: "No Stripe customer found" });
       }
@@ -1248,6 +1837,89 @@ async function registerRoutes(app2) {
   });
   const httpServer = createServer(app2);
   return httpServer;
+}
+function getPublicBaseUrl(req) {
+  const domains = process.env.REPLIT_DOMAINS || "";
+  const deploymentDomain = process.env.DEPLOYMENT_DOMAIN || domains.split(",").find((d) => d.trim().endsWith(".replit.app"))?.trim() || "";
+  return deploymentDomain ? `https://${deploymentDomain}` : `${req.protocol}://${req.get("host")}`;
+}
+async function resolveOwnerSettings(toNumber, fromNumber) {
+  const allSettings = await db.select().from(settings);
+  const matching = allSettings.filter((s) => {
+    const t = s.twilioPhoneNumber || "";
+    return t && phonesMatchSimple(t, toNumber);
+  });
+  if (matching.length === 0) return null;
+  if (matching.length === 1) return matching[0];
+  const scored = matching.map((s) => {
+    let score = 0;
+    if (s.businessName && s.businessName.trim()) score += 2;
+    const svcList = s.services;
+    if (Array.isArray(svcList) && svcList.length > 0) score += 1;
+    return { s, score };
+  }).sort((a, b) => b.score - a.score);
+  const top = scored[0].score;
+  const candidates = scored.filter((x) => x.score === top).map((x) => x.s);
+  if (candidates.length === 1) return candidates[0];
+  const recent = await db.select().from(missedCalls).where(eq4(missedCalls.phoneNumber, fromNumber)).orderBy(desc2(missedCalls.timestamp)).limit(1);
+  if (recent.length > 0) {
+    const m = candidates.find((s) => s.userId === recent[0].userId);
+    if (m) return m;
+  }
+  return candidates[0];
+}
+async function handleMissedCallAndRespond(req, res, userId, settingsRow, from, callerName, baseUrl) {
+  let missedCallId = null;
+  try {
+    const existing = await db.select().from(missedCalls).where(and2(eq4(missedCalls.userId, userId), eq4(missedCalls.phoneNumber, from))).orderBy(desc2(missedCalls.timestamp)).limit(1);
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1e3);
+    const isDuplicate = existing.length > 0 && new Date(existing[0].timestamp) > fiveMinAgo;
+    if (isDuplicate) {
+      missedCallId = existing[0].id;
+      console.log(`Duplicate call from ${from} within 5 minutes \u2014 reusing call ${missedCallId}`);
+    } else {
+      const [newCall] = await db.insert(missedCalls).values({
+        userId,
+        callerName: callerName || "Unknown Caller",
+        phoneNumber: from,
+        timestamp: /* @__PURE__ */ new Date()
+      }).returning();
+      missedCallId = newCall.id;
+      console.log(`Missed call logged for user ${userId}: ${from} (id: ${missedCallId})`);
+      if (settingsRow?.autoReplyEnabled) {
+        try {
+          await sendInitialMissedCallSms(missedCallId, userId);
+          console.log(`Auto-reply SMS sent for call ${missedCallId}`);
+        } catch (smsErr) {
+          console.error("Auto-reply SMS failed:", smsErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("handleMissedCallAndRespond DB error:", err);
+  }
+  const businessName = settingsRow?.businessName || "us";
+  const voiceMessage = (settingsRow?.missedCallVoiceMessage || "Sorry we missed your call. Please leave a message after the tone and we will get back to you.").trim();
+  const hasRecording = !!(settingsRow?.voiceRecordingData && settingsRow?.voiceRecordingMimeType);
+  const recordingUrl = hasRecording && settingsRow?.userId ? `${baseUrl}/api/voice-recording/${settingsRow.userId}` : null;
+  const voicemailEnabled = settingsRow?.voicemailEnabled !== false;
+  const greetingTwiml = recordingUrl ? `<Play>${recordingUrl}</Play>` : `<Say voice="alice">${voiceMessage} Thanks for calling ${businessName}.</Say>`;
+  if (voicemailEnabled && missedCallId) {
+    const recCb = `${baseUrl}/api/twilio/recording-callback?missedCallId=${encodeURIComponent(missedCallId)}`;
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  ${greetingTwiml}
+  <Record action="${recCb}" method="POST" recordingStatusCallback="${recCb}" recordingStatusCallbackMethod="POST" maxLength="120" timeout="5" playBeep="true" finishOnKey="#" trim="trim-silence"/>
+  <Say voice="alice">No message recorded. Goodbye.</Say>
+  <Hangup/>
+</Response>`);
+  } else {
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  ${greetingTwiml}
+  <Hangup/>
+</Response>`);
+  }
 }
 function phonesMatchSimple(a, b) {
   const cleanA = a.replace(/[\s\-()]/g, "");
@@ -1280,7 +1952,9 @@ var WebhookHandlers = class {
 };
 
 // server/index.ts
-import { eq as eq4 } from "drizzle-orm";
+init_db();
+init_schema();
+import { eq as eq5 } from "drizzle-orm";
 import bcrypt2 from "bcryptjs";
 import * as fs from "fs";
 import * as path from "path";
@@ -1466,6 +2140,16 @@ async function bootstrapDefaultUser() {
     return;
   }
   try {
+    const demoToDelete = await db.select().from(users).where(eq5(users.email, "demo@tradiecatch.com"));
+    if (demoToDelete.length > 0) {
+      const demoId = demoToDelete[0].id;
+      await db.delete(missedCalls).where(eq5(missedCalls.userId, demoId));
+      await db.delete(jobs).where(eq5(jobs.userId, demoId));
+      await db.delete(smsTemplates).where(eq5(smsTemplates.userId, demoId));
+      await db.delete(settings).where(eq5(settings.userId, demoId));
+      await db.delete(users).where(eq5(users.id, demoId));
+      log("Bootstrap: deleted demo@tradiecatch.com account and all associated data");
+    }
     const allUsers = await db.select().from(users);
     if (allUsers.length > 0) {
       const allSettings = await db.select().from(settings);
@@ -1475,7 +2159,7 @@ async function bootstrapDefaultUser() {
         await db.update(settings).set({
           bookingCalendarEnabled: true,
           bookingSlots: userSettings.bookingSlots || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"]
-        }).where(eq4(settings.userId, firstUser.id));
+        }).where(eq5(settings.userId, firstUser.id));
         log(`Bootstrap: Enabled booking calendar for user ${firstUser.email}`);
       }
       const hasMatchingNumber = allSettings.some((s) => s.twilioPhoneNumber === twilioPhone);
@@ -1489,10 +2173,19 @@ async function bootstrapDefaultUser() {
           twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || "",
           twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || "",
           businessName: userSettings.businessName || "TradieCatch"
-        }).where(eq4(settings.userId, firstUser.id));
+        }).where(eq5(settings.userId, firstUser.id));
         log(`Bootstrap: Updated user ${firstUser.email} with Twilio number ${twilioPhone}`);
       }
       log("Bootstrap: Users exist but Twilio number not matched to any");
+      const resetPwd = process.env.ADMIN_PASSWORD_RESET;
+      if (resetPwd) {
+        const adminUser = allUsers.find((u) => u.email === "admin@tradiecatch.com");
+        if (adminUser) {
+          const newHash = await bcrypt2.hash(resetPwd, 12);
+          await db.update(users).set({ password: newHash }).where(eq5(users.id, adminUser.id));
+          log(`Bootstrap: admin password was reset via ADMIN_PASSWORD_RESET env var`);
+        }
+      }
       return;
     }
     log("Bootstrap: No users found, creating default account...");
