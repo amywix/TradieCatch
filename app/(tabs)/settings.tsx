@@ -222,6 +222,26 @@ export default function SettingsScreen() {
     await updateAppSettings({ autoReplyEnabled: value });
   }, [updateAppSettings]);
 
+  const handleToggleVoicemail = useCallback(async (value: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await updateAppSettings({ voicemailEnabled: value } as any);
+  }, [updateAppSettings]);
+
+  const handleSaveTradieMobile = useCallback(async (value: string) => {
+    await updateAppSettings({ tradieMobileNumber: value.trim() } as any);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [updateAppSettings]);
+
+  const handleSetForwardingMode = useCallback(async (mode: 'carrier_forward' | 'twilio_dial') => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await updateAppSettings({ forwardingMode: mode } as any);
+  }, [updateAppSettings]);
+
+  const [tradieMobile, setTradieMobile] = useState((settings as any).tradieMobileNumber || '');
+  useEffect(() => {
+    setTradieMobile((settings as any).tradieMobileNumber || '');
+  }, [(settings as any).tradieMobileNumber]);
+
   const handleToggleBookingCalendar = useCallback(async (value: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await updateAppSettings({ bookingCalendarEnabled: value });
@@ -541,6 +561,95 @@ export default function SettingsScreen() {
                 trackColor={{ false: Colors.border, true: Colors.accent }}
                 thumbColor={Colors.white}
               />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Voicemail & Call Forwarding</Text>
+          <View style={styles.card}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIcon, { backgroundColor: '#FFE8D6' }]}>
+                  <Ionicons name="mic-outline" size={18} color={Colors.accent} />
+                </View>
+                <View style={styles.settingContent}>
+                  <Text style={styles.settingLabel}>Capture Voicemail</Text>
+                  <Text style={styles.settingDescription}>
+                    Record a message after the greeting and SMS the link to your mobile
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={(settings as any).voicemailEnabled !== false}
+                onValueChange={handleToggleVoicemail}
+                trackColor={{ false: Colors.border, true: Colors.accent }}
+                thumbColor={Colors.white}
+              />
+            </View>
+
+            <View style={styles.flowDivider} />
+
+            <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+              <Text style={styles.settingLabel}>Your Mobile Number</Text>
+              <Text style={[styles.settingDescription, { marginBottom: 8 }]}>
+                Where voicemail recordings get sent (and where Twilio calls if you choose Option A below)
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={tradieMobile}
+                onChangeText={setTradieMobile}
+                onBlur={() => handleSaveTradieMobile(tradieMobile)}
+                placeholder="+61 4XX XXX XXX"
+                placeholderTextColor={Colors.textLight}
+                keyboardType="phone-pad"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.flowDivider} />
+
+            <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+              <Text style={styles.settingLabel}>How Calls Reach Voicemail</Text>
+              <TouchableOpacity
+                style={[
+                  styles.modeOption,
+                  ((settings as any).forwardingMode || 'carrier_forward') === 'carrier_forward' && styles.modeOptionActive,
+                ]}
+                onPress={() => handleSetForwardingMode('carrier_forward')}
+              >
+                <View style={styles.modeOptionHeader}>
+                  <Ionicons
+                    name={((settings as any).forwardingMode || 'carrier_forward') === 'carrier_forward' ? 'radio-button-on' : 'radio-button-off'}
+                    size={20}
+                    color={Colors.accent}
+                  />
+                  <Text style={styles.modeOptionTitle}>Option B — Carrier Forward (recommended)</Text>
+                </View>
+                <Text style={styles.modeOptionDesc}>
+                  Customers ring your normal mobile number. Your carrier forwards unanswered calls to Twilio, which records the voicemail. Use the diversion codes below to set this up once.
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modeOption,
+                  ((settings as any).forwardingMode || 'carrier_forward') === 'twilio_dial' && styles.modeOptionActive,
+                ]}
+                onPress={() => handleSetForwardingMode('twilio_dial')}
+              >
+                <View style={styles.modeOptionHeader}>
+                  <Ionicons
+                    name={((settings as any).forwardingMode) === 'twilio_dial' ? 'radio-button-on' : 'radio-button-off'}
+                    size={20}
+                    color={Colors.accent}
+                  />
+                  <Text style={styles.modeOptionTitle}>Option A — Twilio Calls You First</Text>
+                </View>
+                <Text style={styles.modeOptionDesc}>
+                  Customers ring your Twilio number directly. Twilio rings your mobile for 20 seconds; if you don't answer, it records voicemail. Best when you advertise the Twilio number.
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1506,6 +1615,36 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.borderLight,
     marginLeft: 13,
     marginVertical: 2,
+  },
+  modeOption: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+    backgroundColor: Colors.background,
+  },
+  modeOptionActive: {
+    borderColor: Colors.accent,
+    backgroundColor: '#FFF6EE',
+  },
+  modeOptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  modeOptionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  modeOptionDesc: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 17,
+    fontFamily: 'Inter_400Regular',
   },
   serviceRow: {
     flexDirection: 'row',

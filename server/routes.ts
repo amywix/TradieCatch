@@ -296,120 +296,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     console.log(`Incoming call from ${from} to ${to} (status: ${callStatus}, name: ${callerName})`);
 
-    let userId: string | null = null;
-    let settingsRow: any = null;
-
-    try {
-      const allSettings = await db.select().from(settings);
-      const configuredNumbers = allSettings.filter(s => s.twilioPhoneNumber).map(s => s.twilioPhoneNumber);
-      console.log(`Looking for Twilio number ${to} among configured numbers: ${JSON.stringify(configuredNumbers)}`);
-
-      // Collect ALL users whose Twilio number matches — pick the one with the
-      // most recent missed call from this caller (most active account), else first found.
-      const matchingSettings = allSettings.filter(s => {
-        const twilioNum = s.twilioPhoneNumber || "";
-        return twilioNum && phonesMatchSimple(twilioNum, to);
-      });
-
-      if (matchingSettings.length === 0) {
-        console.log(`No user found for Twilio number: ${to}`);
-        res.set("Content-Type", "text/xml");
-        res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice">Sorry, this number is not configured.</Say><Hangup/></Response>`);
-        return;
-      }
-
-      if (matchingSettings.length === 1) {
-        settingsRow = matchingSettings[0];
-      } else {
-        // Multiple users share this number — score each by completeness:
-        // +2 if businessName is set, +1 if services are customised
-        const scored = matchingSettings.map(s => {
-          let score = 0;
-          if (s.businessName && (s.businessName as string).trim()) score += 2;
-          const svcList = s.services as string[] | null;
-          if (Array.isArray(svcList) && svcList.length > 0) score += 1;
-          return { s, score };
-        }).sort((a, b) => b.score - a.score);
-
-        // Among equally-scored candidates prefer the one with the most recent call
-        const topScore = scored[0].score;
-        const topCandidates = scored.filter(x => x.score === topScore).map(x => x.s);
-
-        if (topCandidates.length === 1) {
-          settingsRow = topCandidates[0];
-        } else {
-          const recentCalls = await db.select().from(missedCalls)
-            .where(eq(missedCalls.phoneNumber, from))
-            .orderBy(desc(missedCalls.timestamp))
-            .limit(1);
-          if (recentCalls.length > 0) {
-            const match = topCandidates.find(s => s.userId === recentCalls[0].userId);
-            settingsRow = match || topCandidates[0];
-          } else {
-            settingsRow = topCandidates[0];
-          }
-        }
-      }
-
-      userId = settingsRow.userId as string;
-      console.log(`Resolved to user ${userId} for Twilio number ${to}`);
-
-      const existingCalls = await db.select().from(missedCalls)
-        .where(and(eq(missedCalls.userId, userId!), eq(missedCalls.phoneNumber, from)))
-        .orderBy(desc(missedCalls.timestamp))
-        .limit(1);
-
-      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const isDuplicate = existingCalls.length > 0 && new Date(existingCalls[0].timestamp) > fiveMinAgo;
-
-      if (!isDuplicate) {
-        const [newCall] = await db.insert(missedCalls).values({
-          userId: userId!,
-          callerName: callerName || "Unknown Caller",
-          phoneNumber: from,
-          timestamp: new Date(),
-        }).returning();
-
-        console.log(`Missed call logged for user ${userId}: ${from} (id: ${newCall.id})`);
-
-        if (settingsRow?.autoReplyEnabled) {
-          try {
-            await sendInitialMissedCallSms(newCall.id, userId!);
-            console.log(`Auto-reply SMS sent for call ${newCall.id}`);
-          } catch (smsErr) {
-            console.error("Auto-reply SMS failed:", smsErr);
-          }
-        }
-      } else {
-        console.log(`Duplicate call from ${from} within 5 minutes, skipping.`);
-      }
-    } catch (err) {
-      console.error("Voice webhook error:", err);
+    let settingsRow: any = await resolveOwnerSettings(to, from);
+    if (!settingsRow) {
+      console.log(`No user found for Twilio number: ${to}`);
+      res.set("Content-Type", "text/xml");
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice">Sorry, this number is not configured.</Say><Hangup/></Response>`);
+      return;
     }
+    const userId = settingsRow.userId as string;
+    console.log(`Resolved to user ${userId} for Twilio number ${to}`);
 
-    const businessName = settingsRow?.businessName || "us";
-    const voiceMessage = (settingsRow?.missedCallVoiceMessage || "Sorry we missed your call. We will SMS you now to follow up.").trim();
-    const hasRecording = !!(settingsRow?.voiceRecordingData && settingsRow?.voiceRecordingMimeType);
-
-    // Build the public URL for the recording
-    const domains = process.env.REPLIT_DOMAINS || "";
-    const deploymentDomain = process.env.DEPLOYMENT_DOMAIN || domains.split(",").find((d: string) => d.trim().endsWith('.replit.app'))?.trim() || "";
-    const baseUrl = deploymentDomain ? `https://${deploymentDomain}` : `${req.protocol}://${req.get("host")}`;
-    const recordingUrl = hasRecording && settingsRow?.userId ? `${baseUrl}/api/voice-recording/${settingsRow.userId}` : null;
+    const baseUrl = getPublicBaseUrl(req);
+    const mode = (settingsRow.forwardingMode as string) || "carrier_forward";
+    const tradieMobile = (settingsRow.tradieMobileNumber as string || "").trim();
 
     res.set("Content-Type", "text/xml");
-    if (recordingUrl) {
+
+    // Option A — Twilio is the front door. Try the tradie's mobile first; if no answer, voicemail/SMS flow runs in dial-result.
+    if (mode === "twilio_dial" && tradieMobile) {
+      const actionUrl = `${baseUrl}/api/twilio/dial-result?ownerUserId=${encodeURIComponent(userId)}&caller=${encodeURIComponent(from)}&callerName=${encodeURIComponent(callerName)}`;
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Play>${recordingUrl}</Play>
-  <Hangup/>
+  <Dial action="${actionUrl}" method="POST" timeout="20" callerId="${to}">
+    <Number>${tradieMobile}</Number>
+  </Dial>
 </Response>`);
-    } else {
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">${voiceMessage} Thanks for calling ${businessName}.</Say>
-  <Hangup/>
-</Response>`);
+      return;
+    }
+
+    // Option B (default) — call has already been forwarded by carrier (or direct), so go straight to voicemail flow
+    await handleMissedCallAndRespond(req, res, userId, settingsRow, from, callerName, baseUrl);
+  });
+
+  // Called when a Dial attempt to the tradie completes. If they answered, we hang up.
+  // If they didn't, we run the missed-call/voicemail flow.
+  app.post("/api/twilio/dial-result", async (req: Request, res: Response) => {
+    const dialStatus = req.body.DialCallStatus || "";
+    const ownerUserId = (req.query.ownerUserId as string) || "";
+    const caller = (req.query.caller as string) || req.body.From || "";
+    const callerName = (req.query.callerName as string) || "Unknown Caller";
+
+    console.log(`Dial result: ${dialStatus} for owner ${ownerUserId}, caller ${caller}`);
+    res.set("Content-Type", "text/xml");
+
+    if (dialStatus === "completed" || dialStatus === "answered") {
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
+      return;
+    }
+
+    const [settingsRow] = await db.select().from(settings).where(eq(settings.userId, ownerUserId));
+    if (!settingsRow) {
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
+      return;
+    }
+    const baseUrl = getPublicBaseUrl(req);
+    await handleMissedCallAndRespond(req, res, ownerUserId, settingsRow, caller, callerName, baseUrl);
+  });
+
+  // Twilio posts to this when a voicemail recording is finished
+  app.post("/api/twilio/recording-callback", async (req: Request, res: Response) => {
+    res.status(200).send("ok");
+    try {
+      const missedCallId = (req.query.missedCallId as string) || "";
+      const recordingUrl = req.body.RecordingUrl || "";
+      const recordingDuration = req.body.RecordingDuration || "0";
+      console.log(`Recording callback: missedCallId=${missedCallId}, url=${recordingUrl}, duration=${recordingDuration}s`);
+      if (!missedCallId || !recordingUrl) return;
+
+      const [call] = await db.select().from(missedCalls).where(eq(missedCalls.id, missedCallId));
+      if (!call) { console.log("Recording callback: missed call not found"); return; }
+
+      const [settingsRow] = await db.select().from(settings).where(eq(settings.userId, call.userId));
+      if (!settingsRow) { console.log("Recording callback: settings not found"); return; }
+
+      // Download the recording from Twilio (auth required)
+      const sid = settingsRow.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "";
+      const token = settingsRow.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "";
+      const authHeader = "Basic " + Buffer.from(`${sid}:${token}`).toString("base64");
+
+      const audioRes = await fetch(`${recordingUrl}.mp3`, { headers: { Authorization: authHeader } });
+      if (!audioRes.ok) { console.error(`Failed to download recording: ${audioRes.status}`); return; }
+      const audioBuf = Buffer.from(await audioRes.arrayBuffer());
+      const audioB64 = audioBuf.toString("base64");
+
+      await db.update(missedCalls).set({
+        voicemailData: audioB64,
+        voicemailMimeType: "audio/mpeg",
+        voicemailDurationSeconds: String(recordingDuration),
+      }).where(eq(missedCalls.id, missedCallId));
+      console.log(`Voicemail saved for call ${missedCallId} (${audioBuf.length} bytes)`);
+
+      // SMS the tradie a link to play the voicemail
+      const tradieMobile = (settingsRow.tradieMobileNumber as string || "").trim();
+      if (tradieMobile) {
+        const baseUrl = getPublicBaseUrl(req);
+        const playUrl = `${baseUrl}/api/voicemail/${missedCallId}`;
+        const { sendSms } = await import("./sms-conversation");
+        const callerLabel = call.callerName && call.callerName !== "Unknown Caller" ? call.callerName : call.phoneNumber;
+        const msg = `📩 New voicemail from ${callerLabel} (${recordingDuration}s).\n\n▶️ Listen: ${playUrl}`;
+        try {
+          await sendSms(tradieMobile, msg, call.userId);
+          console.log(`Voicemail SMS sent to tradie ${tradieMobile}`);
+        } catch (smsErr) {
+          console.error("Voicemail-to-tradie SMS failed:", smsErr);
+        }
+      } else {
+        console.log("No tradie mobile configured — skipping voicemail SMS forward");
+      }
+    } catch (err) {
+      console.error("Recording callback error:", err);
+    }
+  });
+
+  // Public endpoint: streams a stored voicemail audio file (used in tradie SMS link)
+  app.get("/api/voicemail/:id", async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const [call] = await db.select().from(missedCalls).where(eq(missedCalls.id, id));
+      if (!call?.voicemailData) {
+        return res.status(404).send("Voicemail not found");
+      }
+      const buf = Buffer.from(call.voicemailData, "base64");
+      res.set("Content-Type", call.voicemailMimeType || "audio/mpeg");
+      res.set("Content-Length", buf.length.toString());
+      res.set("Cache-Control", "private, max-age=86400");
+      res.send(buf);
+    } catch (err: any) {
+      console.error("Serve voicemail error:", err);
+      res.status(500).send("Error");
     }
   });
 
@@ -796,6 +810,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
   return httpServer;
+}
+
+function getPublicBaseUrl(req: Request): string {
+  const domains = process.env.REPLIT_DOMAINS || "";
+  const deploymentDomain = process.env.DEPLOYMENT_DOMAIN || domains.split(",").find((d: string) => d.trim().endsWith('.replit.app'))?.trim() || "";
+  return deploymentDomain ? `https://${deploymentDomain}` : `${req.protocol}://${req.get("host")}`;
+}
+
+async function resolveOwnerSettings(toNumber: string, fromNumber: string): Promise<any | null> {
+  const allSettings = await db.select().from(settings);
+  const matching = allSettings.filter(s => {
+    const t = s.twilioPhoneNumber || "";
+    return t && phonesMatchSimple(t, toNumber);
+  });
+  if (matching.length === 0) return null;
+  if (matching.length === 1) return matching[0];
+
+  const scored = matching.map(s => {
+    let score = 0;
+    if (s.businessName && (s.businessName as string).trim()) score += 2;
+    const svcList = s.services as string[] | null;
+    if (Array.isArray(svcList) && svcList.length > 0) score += 1;
+    return { s, score };
+  }).sort((a, b) => b.score - a.score);
+
+  const top = scored[0].score;
+  const candidates = scored.filter(x => x.score === top).map(x => x.s);
+  if (candidates.length === 1) return candidates[0];
+
+  const recent = await db.select().from(missedCalls)
+    .where(eq(missedCalls.phoneNumber, fromNumber))
+    .orderBy(desc(missedCalls.timestamp))
+    .limit(1);
+  if (recent.length > 0) {
+    const m = candidates.find(s => s.userId === recent[0].userId);
+    if (m) return m;
+  }
+  return candidates[0];
+}
+
+async function handleMissedCallAndRespond(
+  req: Request,
+  res: Response,
+  userId: string,
+  settingsRow: any,
+  from: string,
+  callerName: string,
+  baseUrl: string,
+): Promise<void> {
+  let missedCallId: string | null = null;
+  try {
+    const existing = await db.select().from(missedCalls)
+      .where(and(eq(missedCalls.userId, userId), eq(missedCalls.phoneNumber, from)))
+      .orderBy(desc(missedCalls.timestamp))
+      .limit(1);
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const isDuplicate = existing.length > 0 && new Date(existing[0].timestamp) > fiveMinAgo;
+
+    if (isDuplicate) {
+      missedCallId = existing[0].id;
+      console.log(`Duplicate call from ${from} within 5 minutes — reusing call ${missedCallId}`);
+    } else {
+      const [newCall] = await db.insert(missedCalls).values({
+        userId,
+        callerName: callerName || "Unknown Caller",
+        phoneNumber: from,
+        timestamp: new Date(),
+      }).returning();
+      missedCallId = newCall.id;
+      console.log(`Missed call logged for user ${userId}: ${from} (id: ${missedCallId})`);
+
+      if (settingsRow?.autoReplyEnabled) {
+        try {
+          await sendInitialMissedCallSms(missedCallId, userId);
+          console.log(`Auto-reply SMS sent for call ${missedCallId}`);
+        } catch (smsErr) {
+          console.error("Auto-reply SMS failed:", smsErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("handleMissedCallAndRespond DB error:", err);
+  }
+
+  const businessName = settingsRow?.businessName || "us";
+  const voiceMessage = (settingsRow?.missedCallVoiceMessage || "Sorry we missed your call. Please leave a message after the tone and we will get back to you.").trim();
+  const hasRecording = !!(settingsRow?.voiceRecordingData && settingsRow?.voiceRecordingMimeType);
+  const recordingUrl = hasRecording && settingsRow?.userId ? `${baseUrl}/api/voice-recording/${settingsRow.userId}` : null;
+  const voicemailEnabled = settingsRow?.voicemailEnabled !== false;
+
+  const greetingTwiml = recordingUrl
+    ? `<Play>${recordingUrl}</Play>`
+    : `<Say voice="alice">${voiceMessage} Thanks for calling ${businessName}.</Say>`;
+
+  if (voicemailEnabled && missedCallId) {
+    const recCb = `${baseUrl}/api/twilio/recording-callback?missedCallId=${encodeURIComponent(missedCallId)}`;
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  ${greetingTwiml}
+  <Record action="${recCb}" method="POST" recordingStatusCallback="${recCb}" recordingStatusCallbackMethod="POST" maxLength="120" timeout="5" playBeep="true" finishOnKey="#" trim="trim-silence"/>
+  <Say voice="alice">No message recorded. Goodbye.</Say>
+  <Hangup/>
+</Response>`);
+  } else {
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  ${greetingTwiml}
+  <Hangup/>
+</Response>`);
+  }
 }
 
 function phonesMatchSimple(a: string, b: string): boolean {

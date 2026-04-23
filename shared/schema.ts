@@ -35,6 +35,9 @@ export const missedCalls = pgTable("missed_calls", {
   isUrgent: boolean("is_urgent").default(false),
   callerEmail: text("caller_email"),
   conversationLog: jsonb("conversation_log").$type<Array<{role: string; message: string; timestamp: string}>>().default([]),
+  voicemailData: text("voicemail_data"),
+  voicemailMimeType: text("voicemail_mime_type"),
+  voicemailDurationSeconds: text("voicemail_duration_seconds"),
 });
 
 export const jobs = pgTable("jobs", {
@@ -95,6 +98,9 @@ export const settings = pgTable("settings", {
     "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"
   ]),
   bookingDates: jsonb("booking_dates").$type<string[]>().default([]),
+  tradieMobileNumber: text("tradie_mobile_number").default(""),
+  forwardingMode: text("forwarding_mode").default("carrier_forward").notNull(),
+  voicemailEnabled: boolean("voicemail_enabled").default(true).notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
