@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput, Switch, Platform,
-  Alert, ActivityIndicator, Modal, KeyboardAvoidingView,
+  Alert, ActivityIndicator, Modal, KeyboardAvoidingView, TouchableOpacity,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import * as ExpoClipboard from 'expo-clipboard';
