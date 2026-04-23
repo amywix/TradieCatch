@@ -217,11 +217,6 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
   }
 
   if (!call) {
-    // Check if this is a new demo enquiry
-    if (body.trim().toLowerCase().includes("demo") && userIds.length > 0) {
-      console.log(`Demo trigger detected from ${fromPhone} — starting demo flow`);
-      return await handleDemoTrigger(fromPhone, userIds[0]);
-    }
     console.log(`No matching call found for phone: "${fromPhone}" (normalized: "${normalizedPhone}")`);
     return null;
   }

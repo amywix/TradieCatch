@@ -5,7 +5,7 @@ import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
 import { WebhookHandlers } from './webhookHandlers';
 import { db } from './db';
-import { users, settings, smsTemplates, DEFAULT_SERVICES } from '@shared/schema';
+import { users, settings, smsTemplates, missedCalls, jobs, DEFAULT_SERVICES } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import * as fs from "fs";
@@ -262,6 +262,18 @@ async function bootstrapDefaultUser() {
   }
 
   try {
+    // One-shot: remove the demo@ account if it still exists (sales/demo flow has been retired)
+    const demoToDelete = await db.select().from(users).where(eq(users.email, 'demo@tradiecatch.com'));
+    if (demoToDelete.length > 0) {
+      const demoId = demoToDelete[0].id;
+      await db.delete(missedCalls).where(eq(missedCalls.userId, demoId));
+      await db.delete(jobs).where(eq(jobs.userId, demoId));
+      await db.delete(smsTemplates).where(eq(smsTemplates.userId, demoId));
+      await db.delete(settings).where(eq(settings.userId, demoId));
+      await db.delete(users).where(eq(users.id, demoId));
+      log('Bootstrap: deleted demo@tradiecatch.com account and all associated data');
+    }
+
     const allUsers = await db.select().from(users);
     if (allUsers.length > 0) {
       const allSettings = await db.select().from(settings);

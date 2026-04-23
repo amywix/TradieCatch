@@ -4,13 +4,12 @@ import { db } from "./db";
 import { sql as rawSql } from "drizzle-orm";
 import { missedCalls, jobs, settings, smsTemplates, users, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, desc, and, not, SQL } from "drizzle-orm";
-import { sendInitialMissedCallSms, handleIncomingReply, handleDemoSmsFlow } from "./sms-conversation";
+import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
 import { register, login, getMe, requireAuth, type AuthRequest } from "./auth";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 // The dedicated TradieCatch sales/demo number — all inbound SMS here goes
 // through the demo booking flow, never the tradie missed-call flow.
-const TRADIECATCH_DEMO_NUMBER = "+61 485 037 218";
 
 function paramId(req: Request | AuthRequest): string {
   const id = req.params.id;
@@ -159,9 +158,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(call);
   });
 
-  // Calendly webhook — fires when a booking is completed (invitee.created)
-  // Configure in Calendly: https://calendly.com/integrations/webhooks → URL: <app>/api/calendly/webhook
-  app.post("/api/calendly/webhook", async (req: Request, res: Response) => {
+  // Calendly webhook removed — sales/demo lead flow has been retired.
+  // Kept as a no-op for any stale subscriptions still posting here.
+  app.post("/api/calendly/webhook-disabled", async (req: Request, res: Response) => {
     try {
       const { sendSms } = await import("./sms-conversation");
       const event = req.body?.event || "";
@@ -279,14 +278,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(`Incoming SMS from ${from} to ${to}: ${body}`);
 
     try {
-      if (phonesMatchSimple(to, TRADIECATCH_DEMO_NUMBER)) {
-        // TradieCatch sales/demo number — run the booking flow
-        console.log(`Routing to demo booking flow (to: ${to})`);
-        await handleDemoSmsFlow(from, body, to);
-      } else {
-        // Any other tradie number — run the normal missed-call flow
-        await handleIncomingReply(from, body, to);
-      }
+      // All inbound SMS goes through the normal missed-call/booking flow
+      await handleIncomingReply(from, body, to);
     } catch (err) {
       console.error("Webhook handler error:", err);
     }
