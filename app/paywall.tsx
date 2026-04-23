@@ -75,7 +75,7 @@ export default function PaywallScreen() {
             <Text style={styles.priceAmount}>$99</Text>
             <Text style={styles.pricePeriod}>/month</Text>
           </View>
-          <Text style={styles.priceDesc}>Cancel anytime.</Text>
+          <Text style={styles.priceDesc}>$299 one-time setup today.{"\n"}First $99/month charged 30 days from now. Cancel anytime.</Text>
         </Animated.View>
       </Animated.View>
 
@@ -95,7 +95,7 @@ export default function PaywallScreen() {
           {purchasing ? (
             <ActivityIndicator size="small" color={Colors.white} />
           ) : (
-            <Text style={styles.subscribeBtnText}>Subscribe — $99/month</Text>
+            <Text style={styles.subscribeBtnText}>Pay $299 Setup &amp; Start</Text>
           )}
         </Pressable>
 

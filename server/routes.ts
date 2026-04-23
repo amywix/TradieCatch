@@ -663,8 +663,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card'],
-        line_items: [{ price: priceId, quantity: 1 }],
+        line_items: [
+          { price: priceId, quantity: 1 },
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'aud',
+              product_data: {
+                name: 'TradieCatch Setup Fee',
+                description: 'One-time setup & onboarding (charged today). $99/month subscription begins after 30 days.',
+              },
+              unit_amount: 29900,
+            },
+          },
+        ],
         mode: 'subscription',
+        subscription_data: {
+          trial_period_days: 30,
+          description: 'TradieCatch Pro — $99/month begins after 30-day setup period',
+        },
         success_url: `${baseUrl}/api/stripe/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/api/stripe/checkout-cancel`,
       });
