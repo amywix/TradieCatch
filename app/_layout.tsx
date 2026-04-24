@@ -25,10 +25,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
     const first = segments[0] || '';
     const onLoginScreen = first === 'login';
-    // The sales pipeline app handles its own auth gate — don't redirect.
-    const onSalesArea = first === 'sales' || first === 'sales-login';
-
-    if (onSalesArea) return;
 
     if (!isAuthenticated && !onLoginScreen) {
       router.replace('/login');
@@ -52,8 +48,6 @@ function RootLayoutNav() {
       <Stack.Screen name="add-call" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="edit-template" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="conversation" options={{ headerShown: false }} />
-      <Stack.Screen name="sales-login" options={{ headerShown: false, gestureEnabled: false }} />
-      <Stack.Screen name="sales" options={{ headerShown: false }} />
     </Stack>
   );
 }

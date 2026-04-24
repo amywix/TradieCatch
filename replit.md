@@ -37,9 +37,6 @@ Tradies can customize their list of services, stored as a JSONB array within the
 #### Subscription System (Stripe)
 The application integrates with Stripe for subscription management. It features a paywall, checkout flow, and customer portal. Stripe webhook handlers manage subscription status and sync data to the database, gating premium features for subscribers.
 
-#### Sales Pipeline (Operator Web App)
-A dedicated web interface for sales operators within the same Expo project allows managing leads through a 5-stage pipeline. It includes operator-specific authentication, lead tracking, SMS communication, and integration with Calendly and Stripe for booking demos and processing setup fees. The system uses specific Twilio inbound dispatching to differentiate sales-related SMS from tradie-specific ones and includes automated SMS replies for lead qualification.
-
 ## External Dependencies
 
 ### Twilio

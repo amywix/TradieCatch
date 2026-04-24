@@ -2,15 +2,11 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
 import { sql as rawSql } from "drizzle-orm";
-import { missedCalls, jobs, settings, smsTemplates, users, leads, leadMessages, salesSettings, DEFAULT_SERVICES } from "@shared/schema";
+import { missedCalls, jobs, settings, smsTemplates, users, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, desc, and, not, SQL } from "drizzle-orm";
 import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
 import { register, login, getMe, requireAuth, type AuthRequest } from "./auth";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
-import { STAGES, sendLeadSms, buildIntroSms, createCheckoutSession, getOrCreateSalesSettings, handleInboundLeadSms, attachCalendlyBooking, clearCalendlyBooking } from "./sales-flow";
-
-// The dedicated TradieCatch sales/demo number — all inbound SMS here goes
-// through the demo booking flow, never the tradie missed-call flow.
 
 function paramId(req: Request | AuthRequest): string {
   const id = req.params.id;
@@ -280,12 +276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(`Incoming SMS from ${from} to ${to}: ${body}`);
 
     try {
-      // First try the sales flow — only if `to` matches the configured sales line AND sender is a known lead
-      const handledBySales = await handleInboundLeadSms(from, to, body, messageSid);
-      if (!handledBySales) {
-        // Otherwise fall back to the tradie missed-call/booking flow
-        await handleIncomingReply(from, body, to);
-      }
+      await handleIncomingReply(from, body, to);
     } catch (err) {
       console.error("Webhook handler error:", err);
     }
@@ -831,205 +822,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ───────────────────────── Sales pipeline (operator) ─────────────────────────
 
-  async function requireOperator(req: AuthRequest, res: Response, next: any) {
-    if (!req.userId) return res.status(401).json({ error: "Authentication required" });
-    const [u] = await db.select().from(users).where(eq(users.id, req.userId));
-    if (!u || !u.isOperator) return res.status(403).json({ error: "Operator access required" });
-    next();
-  }
 
-  app.get("/api/sales/leads", requireAuth, requireOperator, async (_req: AuthRequest, res: Response) => {
-    const rows = await db.select().from(leads).orderBy(desc(leads.updatedAt));
-    res.json(rows);
-  });
-
-  app.post("/api/sales/leads", requireAuth, requireOperator, async (req: AuthRequest, res: Response) => {
-    const { name, phoneNumber, email, address, jobNotes } = req.body || {};
-    if (!name || !phoneNumber) return res.status(400).json({ error: "name and phoneNumber are required" });
-    const [created] = await db.insert(leads).values({
-      name: String(name).trim(),
-      phoneNumber: String(phoneNumber).trim(),
-      email: email ? String(email).trim() : "",
-      address: address ? String(address).trim() : "",
-      jobNotes: jobNotes ? String(jobNotes) : "",
-      stage: "new",
-    }).returning();
-    res.json(created);
-  });
-
-  app.get("/api/sales/leads/:id", requireAuth, requireOperator, async (req: AuthRequest, res: Response) => {
-    const id = paramId(req);
-    const [lead] = await db.select().from(leads).where(eq(leads.id, id));
-    if (!lead) return res.status(404).json({ error: "Lead not found" });
-    const messages = await db.select().from(leadMessages).where(eq(leadMessages.leadId, id)).orderBy(leadMessages.createdAt);
-    res.json({ lead, messages });
-  });
-
-  app.patch("/api/sales/leads/:id", requireAuth, requireOperator, async (req: AuthRequest, res: Response) => {
-    const id = paramId(req);
-    const allowed: Record<string, true> = {
-      name: true, phoneNumber: true, email: true, address: true,
-      jobNotes: true, stage: true, outcome: true, paid: true,
-    };
-    const updates: Record<string, any> = { updatedAt: new Date() };
-    for (const k of Object.keys(req.body || {})) {
-      if (allowed[k]) updates[k] = req.body[k];
-    }
-    if (updates.stage && !STAGES.includes(updates.stage)) {
-      return res.status(400).json({ error: `stage must be one of ${STAGES.join(", ")}` });
-    }
-    const [updated] = await db.update(leads).set(updates).where(eq(leads.id, id)).returning();
-    if (!updated) return res.status(404).json({ error: "Lead not found" });
-    res.json(updated);
-  });
-
-  app.delete("/api/sales/leads/:id", requireAuth, requireOperator, async (req: AuthRequest, res: Response) => {
-    const id = paramId(req);
-    await db.delete(leadMessages).where(eq(leadMessages.leadId, id));
-    await db.delete(leads).where(eq(leads.id, id));
-    res.json({ success: true });
-  });
-
-  app.post("/api/sales/leads/:id/send-intro", requireAuth, requireOperator, async (req: AuthRequest, res: Response) => {
-    const id = paramId(req);
-    try {
-      const body = await buildIntroSms(id);
-      await sendLeadSms(id, body);
-      const [updated] = await db.update(leads).set({ stage: "qualified", updatedAt: new Date() }).where(eq(leads.id, id)).returning();
-      res.json({ success: true, lead: updated });
-    } catch (err: any) {
-      console.error("send-intro error:", err);
-      res.status(500).json({ error: err.message || "Failed to send SMS" });
-    }
-  });
-
-  app.post("/api/sales/leads/:id/send-message", requireAuth, requireOperator, async (req: AuthRequest, res: Response) => {
-    const id = paramId(req);
-    const { body } = req.body || {};
-    if (!body || !String(body).trim()) return res.status(400).json({ error: "body is required" });
-    try {
-      await sendLeadSms(id, String(body));
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to send SMS" });
-    }
-  });
-
-  app.post("/api/sales/leads/:id/resend-payment", requireAuth, requireOperator, async (req: AuthRequest, res: Response) => {
-    const id = paramId(req);
-    try {
-      const baseUrl = getPublicBaseUrl(req);
-      const session = await createCheckoutSession(id, baseUrl);
-      const reply = `Here's your TradieCatch setup link ($299 one-off): ${session.url}`;
-      await sendLeadSms(id, reply);
-      res.json({ success: true, url: session.url });
-    } catch (err: any) {
-      console.error("resend-payment error:", err);
-      res.status(500).json({ error: err.message || "Failed to send payment link" });
-    }
-  });
-
-  app.post("/api/sales/leads/:id/resend-booking", requireAuth, requireOperator, async (req: AuthRequest, res: Response) => {
-    const id = paramId(req);
-    try {
-      const s = await getOrCreateSalesSettings();
-      if (!s.calendlyUrl) return res.status(400).json({ error: "Calendly URL not configured in Settings" });
-      await sendLeadSms(id, `Pick a time that works for you: ${s.calendlyUrl}`);
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to send booking link" });
-    }
-  });
-
-  app.get("/api/sales/settings", requireAuth, requireOperator, async (_req: AuthRequest, res: Response) => {
-    const s = await getOrCreateSalesSettings();
-    const baseUrl = process.env.REPLIT_DOMAINS
-      ? `https://${process.env.REPLIT_DOMAINS.split(",")[0].trim()}`
-      : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "");
-    const calendlySecret = process.env.CALENDLY_WEBHOOK_SECRET || "";
-    res.json({
-      ...s,
-      twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || "",
-      webhookUrls: {
-        twilioInboundSms: `${baseUrl}/api/twilio/webhook`,
-        stripe: `${baseUrl}/api/stripe/webhook`,
-        calendly: `${baseUrl}/api/sales/calendly/webhook${calendlySecret ? `?key=${encodeURIComponent(calendlySecret)}` : ""}`,
-      },
-      configuredSecrets: {
-        TWILIO_ACCOUNT_SID: !!process.env.TWILIO_ACCOUNT_SID,
-        TWILIO_AUTH_TOKEN: !!process.env.TWILIO_AUTH_TOKEN,
-        TWILIO_PHONE_NUMBER: !!process.env.TWILIO_PHONE_NUMBER,
-        STRIPE_SECRET_KEY: !!process.env.STRIPE_SECRET_KEY,
-        CALENDLY_WEBHOOK_SECRET: !!process.env.CALENDLY_WEBHOOK_SECRET,
-      },
-    });
-  });
-
-  app.patch("/api/sales/settings", requireAuth, requireOperator, async (req: AuthRequest, res: Response) => {
-    const { demoVideoUrl, calendlyUrl, introSmsTemplate } = req.body || {};
-    const updates: Record<string, any> = { updatedAt: new Date() };
-    if (typeof demoVideoUrl === "string") updates.demoVideoUrl = demoVideoUrl.trim();
-    if (typeof calendlyUrl === "string") updates.calendlyUrl = calendlyUrl.trim();
-    if (typeof introSmsTemplate === "string") updates.introSmsTemplate = introSmsTemplate;
-    await getOrCreateSalesSettings();
-    const [updated] = await db.update(salesSettings).set(updates).where(eq(salesSettings.id, "sales-singleton")).returning();
-    res.json(updated);
-  });
-
-  // Calendly webhook — public, but supports an optional shared-secret query param.
-  // If CALENDLY_WEBHOOK_SECRET env var is set, the operator must include `?key=<secret>` in
-  // the URL they paste into Calendly. Requests without a matching key are rejected.
-  // (This is a lightweight defense; a future enhancement is full HMAC signature verification.)
-  app.post("/api/sales/calendly/webhook", async (req: Request, res: Response) => {
-    try {
-      const requiredKey = process.env.CALENDLY_WEBHOOK_SECRET || "";
-      if (requiredKey) {
-        const provided = (req.query.key as string) || "";
-        if (provided !== requiredKey) {
-          console.warn("[calendly] webhook rejected: missing/invalid ?key param");
-          return res.status(401).json({ error: "Unauthorized" });
-        }
-      }
-      const event = req.body?.event || "";
-      const payload = req.body?.payload || {};
-      const inviteeEmail = payload?.email || null;
-      const questionsAndAnswers = Array.isArray(payload?.questions_and_answers) ? payload.questions_and_answers : [];
-      const phoneAnswer = questionsAndAnswers.find((q: any) =>
-        typeof q?.question === "string" && /phone|mobile/i.test(q.question)
-      );
-      const phoneFromQuestion = phoneAnswer?.answer || null;
-      const inviteePhone = payload?.text_reminder_number || phoneFromQuestion || null;
-      const startTimeStr = payload?.scheduled_event?.start_time || payload?.event?.start_time || null;
-      const eventUri = payload?.uri || payload?.scheduled_event?.uri || "";
-
-      if (event === "invitee.created" && startTimeStr && eventUri) {
-        const result = await attachCalendlyBooking({
-          email: inviteeEmail,
-          phone: inviteePhone,
-          startTime: new Date(startTimeStr),
-          eventUri,
-        });
-        console.log(`[calendly] invitee.created → lead ${result.leadId || "(no match)"}`);
-      } else if (event === "invitee.canceled" && eventUri) {
-        const result = await clearCalendlyBooking(eventUri);
-        console.log(`[calendly] invitee.canceled → lead ${result.leadId || "(no match)"}`);
-      }
-      res.json({ received: true });
-    } catch (err: any) {
-      console.error("Calendly webhook error:", err);
-      res.status(200).json({ received: true });
-    }
-  });
-
-  app.get("/api/sales/agenda", requireAuth, requireOperator, async (_req: AuthRequest, res: Response) => {
-    const all = await db.select().from(leads);
-    const upcoming = all
-      .filter(l => l.calendlyEventTime && new Date(l.calendlyEventTime).getTime() >= Date.now() - 60 * 60 * 1000)
-      .sort((a, b) => new Date(a.calendlyEventTime!).getTime() - new Date(b.calendlyEventTime!).getTime());
-    res.json(upcoming);
-  });
 
   const httpServer = createServer(app);
   return httpServer;

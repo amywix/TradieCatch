@@ -5,10 +5,9 @@ import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
 import { WebhookHandlers } from './webhookHandlers';
 import { db } from './db';
-import { users, settings, smsTemplates, missedCalls, jobs, leads, salesSettings, DEFAULT_SERVICES } from '@shared/schema';
+import { users, settings, smsTemplates, missedCalls, jobs, DEFAULT_SERVICES } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import { markLeadPaid } from './sales-flow';
 import * as fs from "fs";
 import * as path from "path";
 
@@ -356,81 +355,6 @@ async function bootstrapDefaultUser() {
   }
 }
 
-async function bootstrapSalesOperator() {
-  try {
-    const isProd = process.env.NODE_ENV === 'production';
-    const envEmail = process.env.SALES_OPERATOR_EMAIL;
-    const envPwd = process.env.SALES_OPERATOR_PASSWORD;
-
-    // In production, REQUIRE both env vars — never seed a default password.
-    // In development, fall back to a known-default for convenience.
-    if (isProd && (!envEmail || !envPwd)) {
-      const existingOperators = await db.select().from(users).where(eq(users.isOperator, true));
-      if (existingOperators.length === 0) {
-        console.error('━'.repeat(70));
-        console.error('⚠ SALES PIPELINE DISABLED');
-        console.error('No operator accounts exist and SALES_OPERATOR_EMAIL/SALES_OPERATOR_PASSWORD');
-        console.error('are not set. The sales pipeline will be inaccessible until you either:');
-        console.error('  • Set SALES_OPERATOR_EMAIL + SALES_OPERATOR_PASSWORD env vars and restart, or');
-        console.error('  • Manually mark an existing user as operator (UPDATE users SET is_operator=true ...)');
-        console.error('━'.repeat(70));
-      } else {
-        log(`Bootstrap: SALES_OPERATOR_* env vars not set in production; using ${existingOperators.length} existing operator account(s).`);
-      }
-      // Still ensure singleton sales_settings row exists.
-      const existing = await db.select().from(salesSettings).where(eq(salesSettings.id, 'sales-singleton'));
-      if (existing.length === 0) {
-        await db.insert(salesSettings).values({
-          id: 'sales-singleton',
-          demoVideoUrl: process.env.DEMO_VIDEO_URL || '',
-          calendlyUrl: process.env.CALENDLY_URL || '',
-        });
-      }
-      return;
-    }
-
-    const operatorEmail = (envEmail || 'operator@tradiecatch.com').toLowerCase();
-    const operatorPwd = envPwd || 'operator123';
-
-    const existingByEmail = await db.select().from(users).where(eq(users.email, operatorEmail));
-    if (existingByEmail.length > 0) {
-      const u = existingByEmail[0];
-      if (!u.isOperator) {
-        await db.update(users).set({ isOperator: true }).where(eq(users.id, u.id));
-        log(`Bootstrap: marked existing user ${operatorEmail} as operator`);
-      }
-    } else {
-      const hash = await bcrypt.hash(operatorPwd, 12);
-      await db.insert(users).values({
-        email: operatorEmail,
-        username: 'Sales Operator',
-        password: hash,
-        isOperator: true,
-      });
-      log(`Bootstrap: created sales operator ${operatorEmail}`);
-    }
-
-    // Also flag the admin as operator (so they can use both apps with one login if they want)
-    const admin = await db.select().from(users).where(eq(users.email, 'admin@tradiecatch.com'));
-    if (admin[0] && !admin[0].isOperator) {
-      await db.update(users).set({ isOperator: true }).where(eq(users.id, admin[0].id));
-      log('Bootstrap: marked admin@tradiecatch.com as operator');
-    }
-
-    // Ensure sales_settings row exists
-    const existing = await db.select().from(salesSettings).where(eq(salesSettings.id, 'sales-singleton'));
-    if (existing.length === 0) {
-      await db.insert(salesSettings).values({
-        id: 'sales-singleton',
-        demoVideoUrl: process.env.DEMO_VIDEO_URL || '',
-        calendlyUrl: process.env.CALENDLY_URL || '',
-      });
-      log('Bootstrap: created default sales_settings row');
-    }
-  } catch (err) {
-    console.error('Sales operator bootstrap error:', err);
-  }
-}
 
 async function initStripe() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -483,21 +407,6 @@ async function initStripe() {
         }
         await WebhookHandlers.processWebhook(req.body as Buffer, sig);
 
-        // Sales setup-fee side-effect: mark the lead paid when their checkout completes.
-        try {
-          const evt = JSON.parse(req.body.toString('utf8'));
-          if (evt?.type === 'checkout.session.completed') {
-            const session = evt?.data?.object || {};
-            const meta = session?.metadata || {};
-            if (meta.type === 'sales_setup_fee' && meta.leadId) {
-              await markLeadPaid(String(meta.leadId));
-              log(`Sales: marked lead ${meta.leadId} as paid (setup fee)`);
-            }
-          }
-        } catch (e) {
-          console.error('Lead paid hook error (non-fatal):', e);
-        }
-
         res.status(200).json({ received: true });
       } catch (error: any) {
         console.error('Webhook error:', error.message);
@@ -525,7 +434,6 @@ async function initStripe() {
     () => {
       log(`express server serving on port ${port}`);
       bootstrapDefaultUser()
-        .then(() => bootstrapSalesOperator())
         .then(() => initStripe())
         .catch(err => console.error('Startup init error (non-fatal):', err));
     },

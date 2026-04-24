@@ -13,51 +13,8 @@ export const users = pgTable("users", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   pushToken: text("push_token"),
-  isOperator: boolean("is_operator").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
-
-export const leads = pgTable("leads", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  phoneNumber: text("phone_number").notNull(),
-  email: text("email").default(""),
-  address: text("address").default(""),
-  jobNotes: text("job_notes").default(""),
-  stage: text("stage").default("new").notNull(),
-  paid: boolean("paid").default(false).notNull(),
-  paidAt: timestamp("paid_at"),
-  outcome: text("outcome"),
-  calendlyEventTime: timestamp("calendly_event_time"),
-  calendlyEventUri: text("calendly_event_uri"),
-  stripeSessionId: text("stripe_session_id"),
-  stripeCheckoutUrl: text("stripe_checkout_url"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const leadMessages = pgTable("lead_messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  leadId: varchar("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
-  direction: text("direction").notNull(),
-  body: text("body").notNull(),
-  twilioSid: text("twilio_sid"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const salesSettings = pgTable("sales_settings", {
-  id: varchar("id").primaryKey().default("sales-singleton"),
-  demoVideoUrl: text("demo_video_url").default(""),
-  calendlyUrl: text("calendly_url").default(""),
-  introSmsTemplate: text("intro_sms_template").default(
-    "Hi {{name}}, this is from TradieCatch — we help tradies turn missed calls into booked jobs automatically. Reply DEMO to see a 60-sec walkthrough or YES to book a quick call."
-  ),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export type Lead = typeof leads.$inferSelect;
-export type LeadMessage = typeof leadMessages.$inferSelect;
-export type SalesSettings = typeof salesSettings.$inferSelect;
 
 export const missedCalls = pgTable("missed_calls", {
   id: varchar("id")
