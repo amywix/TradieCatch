@@ -23,10 +23,27 @@ async function getServices(userId: string): Promise<string[]> {
   return (s?.services as string[]) || DEFAULT_SERVICES;
 }
 
-async function getBookingConfig(userId: string): Promise<{ enabled: boolean; slots: string[]; dates: string[] }> {
+type BookingProvider = "manual" | "calendly" | "google";
+
+async function getBookingConfig(userId: string): Promise<{
+  enabled: boolean;
+  provider: BookingProvider;
+  externalLink: string;
+  slots: string[];
+  dates: string[];
+}> {
   const s = await getSettingsForUser(userId);
+  const rawProvider = ((s as any)?.bookingProvider as string) || "manual";
+  const provider: BookingProvider = (rawProvider === "calendly" || rawProvider === "google") ? rawProvider : "manual";
+  const calendlyLink = ((s as any)?.calendlyLink as string) || "";
+  const googleCalendarLink = ((s as any)?.googleCalendarLink as string) || "";
+  let externalLink = "";
+  if (provider === "calendly" && calendlyLink.trim()) externalLink = calendlyLink.trim();
+  else if (provider === "google" && googleCalendarLink.trim()) externalLink = googleCalendarLink.trim();
   return {
     enabled: s?.bookingCalendarEnabled ?? false,
+    provider,
+    externalLink,
     slots: (s?.bookingSlots as string[]) || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
     dates: (s?.bookingDates as string[]) || [],
   };
@@ -36,10 +53,10 @@ function resolveBookingDates(customDates: string[]): { label: string; dateStr: s
   if (customDates.length > 0) {
     return customDates.map(label => ({ label, dateStr: "" }));
   }
-  return getNextAvailableDates(5);
+  return getNextAvailableDates(7);
 }
 
-function getNextAvailableDates(count: number = 5): { label: string; dateStr: string }[] {
+function getNextAvailableDates(count: number = 7): { label: string; dateStr: string }[] {
   const dates: { label: string; dateStr: string }[] = [];
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -47,12 +64,10 @@ function getNextAvailableDates(count: number = 5): { label: string; dateStr: str
   let d = new Date(now);
   d.setDate(d.getDate() + 1);
   while (dates.length < count) {
-    if (d.getDay() !== 0) {
-      dates.push({
-        label: `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`,
-        dateStr: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-      });
-    }
+    dates.push({
+      label: `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`,
+      dateStr: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    });
     d.setDate(d.getDate() + 1);
   }
   return dates;
@@ -321,7 +336,14 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
       if (emailRegex.test(reply)) {
         updates.callerEmail = reply.toLowerCase();
         const booking = await getBookingConfig(callUserId);
-        if (booking.enabled) {
+        if (booking.enabled && booking.externalLink) {
+          const { businessName } = await getTwilioConfig(callUserId);
+          const providerName = booking.provider === "calendly" ? "Calendly" : "Google Calendar";
+          response = `Thanks! Pick a time that suits you here and we'll be locked in:\n\n${booking.externalLink}\n\nWe'll get a confirmation as soon as you book.${call.isUrgent || updates.isUrgent ? "\n\nMarked as urgent — we'll prioritise this." : ""}\n\n- ${businessName}`;
+          newState = "completed";
+          updates.selectedTime = `Booking link sent (${providerName})`;
+          updates.jobBooked = false;
+        } else if (booking.enabled) {
           const dates = resolveBookingDates(booking.dates);
           const dateMenu = dates.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
           response = `Thanks! What day works best for you?\n\n${dateMenu}`;

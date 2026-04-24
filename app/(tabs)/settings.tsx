@@ -247,6 +247,30 @@ export default function SettingsScreen() {
     await updateAppSettings({ bookingCalendarEnabled: value });
   }, [updateAppSettings]);
 
+  const handleSetBookingProvider = useCallback(async (provider: 'manual' | 'calendly' | 'google') => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await updateAppSettings({ bookingProvider: provider } as any);
+  }, [updateAppSettings]);
+
+  const [calendlyLinkInput, setCalendlyLinkInput] = useState((settings as any).calendlyLink || '');
+  const [googleCalLinkInput, setGoogleCalLinkInput] = useState((settings as any).googleCalendarLink || '');
+  useEffect(() => {
+    setCalendlyLinkInput((settings as any).calendlyLink || '');
+  }, [(settings as any).calendlyLink]);
+  useEffect(() => {
+    setGoogleCalLinkInput((settings as any).googleCalendarLink || '');
+  }, [(settings as any).googleCalendarLink]);
+
+  const handleSaveCalendlyLink = useCallback(async () => {
+    await updateAppSettings({ calendlyLink: calendlyLinkInput.trim() } as any);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [updateAppSettings, calendlyLinkInput]);
+
+  const handleSaveGoogleCalLink = useCallback(async () => {
+    await updateAppSettings({ googleCalendarLink: googleCalLinkInput.trim() } as any);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [updateAppSettings, googleCalLinkInput]);
+
   const handleSaveVoiceMessage = useCallback(async () => {
     await updateAppSettings({ missedCallVoiceMessage: voiceMessage.trim() || 'Sorry we missed your call. We will SMS you now to follow up.' });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1086,7 +1110,97 @@ export default function SettingsScreen() {
               />
             </View>
           </View>
-          {settings.bookingCalendarEnabled && (
+          {settings.bookingCalendarEnabled && (() => {
+            const provider = ((settings as any).bookingProvider || 'manual') as 'manual' | 'calendly' | 'google';
+            return (
+            <View style={[styles.card, { marginTop: 8, padding: 0 }]}>
+              <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+                <Text style={styles.settingLabel}>Booking Source</Text>
+                <Text style={[styles.settingDescription, { marginTop: 2, marginBottom: 8 }]}>
+                  Pick how customers book a time after they reply via SMS.
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.modeOption, provider === 'manual' && styles.modeOptionActive]}
+                  onPress={() => handleSetBookingProvider('manual')}
+                >
+                  <View style={styles.modeOptionHeader}>
+                    <Ionicons name={provider === 'manual' ? 'radio-button-on' : 'radio-button-off'} size={20} color={Colors.accent} />
+                    <Text style={styles.modeOptionTitle}>Built-in slots (default)</Text>
+                  </View>
+                  <Text style={styles.modeOptionDesc}>
+                    Customers pick from your time slots and dates over SMS. Defaults to the next 7 days if you don't set custom dates below.
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modeOption, provider === 'calendly' && styles.modeOptionActive]}
+                  onPress={() => handleSetBookingProvider('calendly')}
+                >
+                  <View style={styles.modeOptionHeader}>
+                    <Ionicons name={provider === 'calendly' ? 'radio-button-on' : 'radio-button-off'} size={20} color={Colors.accent} />
+                    <Text style={styles.modeOptionTitle}>Calendly link</Text>
+                  </View>
+                  <Text style={styles.modeOptionDesc}>
+                    We'll text the caller your Calendly link so they pick a time on your real calendar.
+                  </Text>
+                  {provider === 'calendly' && (
+                    <View style={{ marginTop: 10 }}>
+                      <TextInput
+                        style={[styles.serviceEditInput, { backgroundColor: Colors.background, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 }]}
+                        value={calendlyLinkInput}
+                        onChangeText={setCalendlyLinkInput}
+                        placeholder="https://calendly.com/your-name/30min"
+                        placeholderTextColor={Colors.textTertiary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="url"
+                        onBlur={handleSaveCalendlyLink}
+                        onSubmitEditing={handleSaveCalendlyLink}
+                      />
+                      <Pressable onPress={handleSaveCalendlyLink} style={{ marginTop: 8, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: Colors.accent, borderRadius: 8 }}>
+                        <Text style={{ color: Colors.white, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Save Calendly Link</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modeOption, provider === 'google' && styles.modeOptionActive]}
+                  onPress={() => handleSetBookingProvider('google')}
+                >
+                  <View style={styles.modeOptionHeader}>
+                    <Ionicons name={provider === 'google' ? 'radio-button-on' : 'radio-button-off'} size={20} color={Colors.accent} />
+                    <Text style={styles.modeOptionTitle}>Google Calendar booking link</Text>
+                  </View>
+                  <Text style={styles.modeOptionDesc}>
+                    Paste the booking page link from Google Calendar (Settings → Appointment schedules → Share).
+                  </Text>
+                  {provider === 'google' && (
+                    <View style={{ marginTop: 10 }}>
+                      <TextInput
+                        style={[styles.serviceEditInput, { backgroundColor: Colors.background, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 }]}
+                        value={googleCalLinkInput}
+                        onChangeText={setGoogleCalLinkInput}
+                        placeholder="https://calendar.app.google/..."
+                        placeholderTextColor={Colors.textTertiary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="url"
+                        onBlur={handleSaveGoogleCalLink}
+                        onSubmitEditing={handleSaveGoogleCalLink}
+                      />
+                      <Pressable onPress={handleSaveGoogleCalLink} style={{ marginTop: 8, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: Colors.accent, borderRadius: 8 }}>
+                        <Text style={{ color: Colors.white, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Save Google Calendar Link</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+            );
+          })()}
+          {settings.bookingCalendarEnabled && ((settings as any).bookingProvider || 'manual') === 'manual' && (
             <>
               <View style={[styles.sectionHeader, { marginTop: 8 }]}>
                 <Text style={[styles.sectionHint, { fontFamily: 'Inter_600SemiBold', color: Colors.textSecondary }]}>Time Slots</Text>
@@ -1187,13 +1301,13 @@ export default function SettingsScreen() {
                 </Pressable>
               </View>
               <Text style={styles.sectionHint}>
-                Add specific dates to offer customers. Leave empty to auto-generate the next 5 weekdays.
+                Add specific dates to offer customers. Leave empty to auto-generate the next 7 days.
               </Text>
               <View style={styles.card}>
                 {bookingDates.length === 0 && !addingDate ? (
                   <View style={[styles.serviceRow, { paddingVertical: 14 }]}>
                     <Text style={[styles.settingDescription, { flex: 1, textAlign: 'center', fontStyle: 'italic' }]}>
-                      Auto-generating next 5 weekdays
+                      Auto-generating next 7 days
                     </Text>
                   </View>
                 ) : (

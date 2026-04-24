@@ -98,6 +98,9 @@ export const settings = pgTable("settings", {
     "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"
   ]),
   bookingDates: jsonb("booking_dates").$type<string[]>().default([]),
+  bookingProvider: text("booking_provider").default("manual").notNull(),
+  calendlyLink: text("calendly_link").default(""),
+  googleCalendarLink: text("google_calendar_link").default(""),
   tradieMobileNumber: text("tradie_mobile_number").default(""),
   forwardingMode: text("forwarding_mode").default("carrier_forward").notNull(),
   voicemailEnabled: boolean("voicemail_enabled").default(true).notNull(),

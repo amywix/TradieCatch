@@ -51,6 +51,9 @@ export interface AppSettings {
   bookingCalendarEnabled: boolean;
   bookingSlots: string[];
   bookingDates: string[];
+  bookingProvider?: 'manual' | 'calendly' | 'google';
+  calendlyLink?: string;
+  googleCalendarLink?: string;
 }
 
 interface DataContextValue {
@@ -101,6 +104,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   bookingCalendarEnabled: false,
   bookingSlots: DEFAULT_BOOKING_SLOTS,
   bookingDates: [],
+  bookingProvider: 'manual',
+  calendlyLink: '',
+  googleCalendarLink: '',
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
