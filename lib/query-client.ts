@@ -3,10 +3,12 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getAuthToken } from "./auth-context";
 
 export function getApiUrl(): string {
-  let host = process.env.EXPO_PUBLIC_DEPLOYMENT_DOMAIN || process.env.EXPO_PUBLIC_DOMAIN;
+  // Prefer EXPO_PUBLIC_DOMAIN (set only by the dev workflow, points at the local backend).
+  // Fall back to EXPO_PUBLIC_DEPLOYMENT_DOMAIN (baked into the production bundle by `expo export`).
+  let host = process.env.EXPO_PUBLIC_DOMAIN || process.env.EXPO_PUBLIC_DEPLOYMENT_DOMAIN;
 
   if (!host) {
-    throw new Error("EXPO_PUBLIC_DOMAIN is not set");
+    throw new Error("Neither EXPO_PUBLIC_DOMAIN nor EXPO_PUBLIC_DEPLOYMENT_DOMAIN is set");
   }
 
   let url = new URL(`https://${host}`);
