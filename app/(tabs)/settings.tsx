@@ -1144,6 +1144,13 @@ export default function SettingsScreen() {
                   <Text style={styles.modeOptionDesc}>
                     We'll text the caller your Calendly link so they pick a time on your real calendar.
                   </Text>
+                  {provider === 'calendly' && !((settings as any).calendlyLink || '').trim() && (
+                    <View style={{ marginTop: 8, padding: 10, backgroundColor: Colors.warning + '20', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: Colors.warning }}>
+                      <Text style={{ color: Colors.warning, fontSize: 12, fontFamily: 'Inter_600SemiBold' }}>
+                        Add your Calendly link below — until you do, customers will keep using the built-in slot picker.
+                      </Text>
+                    </View>
+                  )}
                   {provider === 'calendly' && (
                     <View style={{ marginTop: 10 }}>
                       <TextInput
@@ -1176,6 +1183,13 @@ export default function SettingsScreen() {
                   <Text style={styles.modeOptionDesc}>
                     Paste the booking page link from Google Calendar (Settings → Appointment schedules → Share).
                   </Text>
+                  {provider === 'google' && !((settings as any).googleCalendarLink || '').trim() && (
+                    <View style={{ marginTop: 8, padding: 10, backgroundColor: Colors.warning + '20', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: Colors.warning }}>
+                      <Text style={{ color: Colors.warning, fontSize: 12, fontFamily: 'Inter_600SemiBold' }}>
+                        Add your Google Calendar booking link below — until you do, customers will keep using the built-in slot picker.
+                      </Text>
+                    </View>
+                  )}
                   {provider === 'google' && (
                     <View style={{ marginTop: 10 }}>
                       <TextInput
@@ -1288,7 +1302,7 @@ export default function SettingsScreen() {
               </View>
             </>
           )}
-          {settings.bookingCalendarEnabled && (
+          {settings.bookingCalendarEnabled && ((settings as any).bookingProvider || 'manual') === 'manual' && (
             <>
               <View style={[styles.sectionHeader, { marginTop: 12 }]}>
                 <Text style={[styles.sectionHint, { fontFamily: 'Inter_600SemiBold', color: Colors.textSecondary }]}>Available Dates</Text>

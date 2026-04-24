@@ -384,7 +384,7 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
       if (slotIdx >= 0 && slotIdx < booking.slots.length) {
         const timeSlot = booking.slots[slotIdx];
         const dateLabel = call.selectedTime || updates.selectedTime || "";
-        const dates = getNextAvailableDates(5);
+        const dates = resolveBookingDates(booking.dates);
         const matchedDate = dates.find(d => d.label === dateLabel);
         const dateStr = matchedDate?.dateStr || new Date().toISOString().split("T")[0];
 
