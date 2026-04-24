@@ -10,14 +10,34 @@ export type Stage = typeof STAGES[number];
 
 function normalizePhone(p: string | null | undefined): string {
   if (!p) return "";
-  return p.replace(/[^\d+]/g, "").replace(/^(\d)/, "+$1").replace(/^\++/, "+");
+  // Strip everything except digits and a leading +
+  let v = p.replace(/[^\d+]/g, "").replace(/^\++/, "+");
+  if (!v) return "";
+  // Australian local format: 04XX XXX XXX → +614XX XXX XXX
+  if (/^04\d{8}$/.test(v)) v = "+61" + v.substring(1);
+  // Bare digits without +: assume already E.164 country code, prefix +
+  else if (/^\d+$/.test(v) && v.length >= 10) v = "+" + v;
+  return v;
+}
+
+/** Last-N-digits comparison to tolerate inconsistent country prefixes (e.g. "+61400..." vs "0400...") */
+function phoneTailMatch(a: string, b: string, n: number = 9): boolean {
+  const ad = a.replace(/\D/g, "");
+  const bd = b.replace(/\D/g, "");
+  if (!ad || !bd) return false;
+  return ad.slice(-n) === bd.slice(-n);
 }
 
 export async function findLeadByPhone(phone: string) {
   const norm = normalizePhone(phone);
   if (!norm) return null;
   const rows = await db.select().from(leads);
-  return rows.find(l => normalizePhone(l.phoneNumber) === norm) || null;
+  // Try exact normalized match first, then tolerant tail match.
+  return (
+    rows.find(l => normalizePhone(l.phoneNumber) === norm) ||
+    rows.find(l => phoneTailMatch(l.phoneNumber, norm)) ||
+    null
+  );
 }
 
 export async function getOrCreateSalesSettings() {

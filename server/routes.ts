@@ -948,19 +948,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const baseUrl = process.env.REPLIT_DOMAINS
       ? `https://${process.env.REPLIT_DOMAINS.split(",")[0].trim()}`
       : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "");
+    const calendlySecret = process.env.CALENDLY_WEBHOOK_SECRET || "";
     res.json({
       ...s,
       twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || "",
       webhookUrls: {
         twilioInboundSms: `${baseUrl}/api/twilio/webhook`,
         stripe: `${baseUrl}/api/stripe/webhook`,
-        calendly: `${baseUrl}/api/sales/calendly/webhook`,
+        calendly: `${baseUrl}/api/sales/calendly/webhook${calendlySecret ? `?key=${encodeURIComponent(calendlySecret)}` : ""}`,
       },
       configuredSecrets: {
         TWILIO_ACCOUNT_SID: !!process.env.TWILIO_ACCOUNT_SID,
         TWILIO_AUTH_TOKEN: !!process.env.TWILIO_AUTH_TOKEN,
         TWILIO_PHONE_NUMBER: !!process.env.TWILIO_PHONE_NUMBER,
         STRIPE_SECRET_KEY: !!process.env.STRIPE_SECRET_KEY,
+        CALENDLY_WEBHOOK_SECRET: !!process.env.CALENDLY_WEBHOOK_SECRET,
       },
     });
   });
@@ -976,9 +978,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(updated);
   });
 
-  // Calendly webhook — no auth, but verifies basic shape. Operator pastes this URL in Calendly's webhook settings.
+  // Calendly webhook — public, but supports an optional shared-secret query param.
+  // If CALENDLY_WEBHOOK_SECRET env var is set, the operator must include `?key=<secret>` in
+  // the URL they paste into Calendly. Requests without a matching key are rejected.
+  // (This is a lightweight defense; a future enhancement is full HMAC signature verification.)
   app.post("/api/sales/calendly/webhook", async (req: Request, res: Response) => {
     try {
+      const requiredKey = process.env.CALENDLY_WEBHOOK_SECRET || "";
+      if (requiredKey) {
+        const provided = (req.query.key as string) || "";
+        if (provided !== requiredKey) {
+          console.warn("[calendly] webhook rejected: missing/invalid ?key param");
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+      }
       const event = req.body?.event || "";
       const payload = req.body?.payload || {};
       const inviteeEmail = payload?.email || null;

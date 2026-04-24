@@ -365,7 +365,18 @@ async function bootstrapSalesOperator() {
     // In production, REQUIRE both env vars — never seed a default password.
     // In development, fall back to a known-default for convenience.
     if (isProd && (!envEmail || !envPwd)) {
-      log('Bootstrap: SALES_OPERATOR_EMAIL/PASSWORD not set in production — skipping operator seed.');
+      const existingOperators = await db.select().from(users).where(eq(users.isOperator, true));
+      if (existingOperators.length === 0) {
+        console.error('━'.repeat(70));
+        console.error('⚠ SALES PIPELINE DISABLED');
+        console.error('No operator accounts exist and SALES_OPERATOR_EMAIL/SALES_OPERATOR_PASSWORD');
+        console.error('are not set. The sales pipeline will be inaccessible until you either:');
+        console.error('  • Set SALES_OPERATOR_EMAIL + SALES_OPERATOR_PASSWORD env vars and restart, or');
+        console.error('  • Manually mark an existing user as operator (UPDATE users SET is_operator=true ...)');
+        console.error('━'.repeat(70));
+      } else {
+        log(`Bootstrap: SALES_OPERATOR_* env vars not set in production; using ${existingOperators.length} existing operator account(s).`);
+      }
       // Still ensure singleton sales_settings row exists.
       const existing = await db.select().from(salesSettings).where(eq(salesSettings.id, 'sales-singleton'));
       if (existing.length === 0) {
