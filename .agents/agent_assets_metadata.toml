@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "3d19tdJyftioQluvG3_99"
+uri = "file://TradieCatch-User-Manual.md"
+type = "text"
+title = "TradieCatch — Complete User Manual"
