@@ -42,19 +42,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const savedUser = await AsyncStorage.getItem(USER_KEY);
 
         if (savedToken && savedUser) {
+          // Optimistically restore from storage so the app feels instant.
           _authToken = savedToken;
-          const baseUrl = getApiUrl();
-          const res = await fetch(`${baseUrl}api/auth/me`, {
-            headers: { Authorization: `Bearer ${savedToken}` },
-          });
+          const parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
+          setToken(savedToken);
 
-          if (res.ok) {
-            const userData = await res.json();
-            setUser(userData);
-            setToken(savedToken);
-          } else {
-            await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
-            _authToken = null;
+          // Then validate in the background — only clear if the server
+          // explicitly says the token is invalid (401/403), not on network errors.
+          try {
+            const baseUrl = getApiUrl();
+            const res = await fetch(`${baseUrl}api/auth/me`, {
+              headers: { Authorization: `Bearer ${savedToken}` },
+            });
+
+            if (res.ok) {
+              const userData = await res.json();
+              setUser(userData);
+            } else if (res.status === 401 || res.status === 403) {
+              // Token is genuinely invalid — clear it.
+              setUser(null);
+              setToken(null);
+              _authToken = null;
+              await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+            }
+            // Any other status (500, network error, etc.) — keep the stored session.
+          } catch {
+            // Network error — server may be starting up. Keep the stored session.
+            console.log('Auth validation network error — keeping stored session');
           }
         }
       } catch (err) {
