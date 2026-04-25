@@ -4,6 +4,17 @@ import { leads, leadMessages, salesSettings } from "@shared/schema";
 import type { Lead } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
+// ─── Phone normalizer ─────────────────────────────────────────────────────────
+
+/** Convert any phone number to E.164 format (assumes AU +61 when no country code present) */
+function normalizePhone(phone: string): string {
+  const cleaned = phone.replace(/[\s\-\(\)\.]/g, "");
+  if (cleaned.startsWith("+")) return cleaned;
+  if (cleaned.startsWith("61")) return "+" + cleaned;
+  if (cleaned.startsWith("0")) return "+61" + cleaned.slice(1);
+  return cleaned;
+}
+
 // ─── Twilio helper ────────────────────────────────────────────────────────────
 
 async function getSalesCredentials() {
@@ -12,7 +23,7 @@ async function getSalesCredentials() {
   return {
     accountSid: row?.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "",
     authToken: row?.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "",
-    fromNumber: row?.twilioPhoneNumber || process.env.TWILIO_PHONE_NUMBER || "",
+    fromNumber: normalizePhone(row?.twilioPhoneNumber || process.env.TWILIO_PHONE_NUMBER || ""),
     demoVideoUrl: row?.demoVideoUrl || "",
     calendlyUrl: row?.calendlyUrl || "",
     setupFeeAmount: row?.setupFeeAmount ?? 299,
@@ -27,7 +38,7 @@ async function sendSms(to: string, body: string): Promise<string | null> {
   }
   try {
     const client = twilio(creds.accountSid, creds.authToken);
-    const msg = await client.messages.create({ to, from: creds.fromNumber, body });
+    const msg = await client.messages.create({ to: normalizePhone(to), from: creds.fromNumber, body });
     return msg.sid;
   } catch (err) {
     console.error("Sales SMS send error:", err);
@@ -38,9 +49,11 @@ async function sendSms(to: string, body: string): Promise<string | null> {
 // ─── Lead lookup ──────────────────────────────────────────────────────────────
 
 export async function findLeadByPhone(phone: string): Promise<Lead | null> {
-  const normalized = phone.replace(/\s+/g, "");
-  const rows = await db.select().from(leads).where(eq(leads.phone, normalized)).orderBy(desc(leads.createdAt));
-  return rows[0] ?? null;
+  const e164 = normalizePhone(phone);
+  // Also try the local AU format (0X...) in case lead was stored without country code
+  const local = e164.startsWith("+61") ? "0" + e164.slice(3) : e164;
+  const rows = await db.select().from(leads).orderBy(desc(leads.createdAt));
+  return rows.find(r => r.phone === e164 || r.phone === local || r.phone === phone) ?? null;
 }
 
 // ─── Outbound SMS ─────────────────────────────────────────────────────────────

@@ -92,7 +92,7 @@ async function getTwilioConfig(userId: string) {
   const s = await getSettingsForUser(userId);
   const sid = s?.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "";
   const token = s?.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "";
-  const phone = s?.twilioPhoneNumber || process.env.TWILIO_PHONE_NUMBER || "";
+  const phone = normalizePhone(s?.twilioPhoneNumber || process.env.TWILIO_PHONE_NUMBER || "");
   return { sid, token, phone, businessName: s?.businessName || "" };
 }
 
@@ -107,11 +107,12 @@ export async function sendSms(to: string, body: string, userId: string): Promise
     throw new Error("Twilio credentials not configured. Please set them up in Settings.");
   }
   const client = twilio(sid, token);
+  const toNormalized = normalizePhone(to);
   try {
     await client.messages.create({
       body,
       from: phone,
-      to,
+      to: toNormalized,
     });
     console.log(`SMS sent to ${to}: ${body.substring(0, 50)}...`);
   } catch (err) {
@@ -804,8 +805,12 @@ export async function triggerCustomerExperienceDemo(fromPhone: string, toPhone: 
   return true;
 }
 
+/** Convert any phone number to E.164 format (assumes AU +61 when no country code present) */
 function normalizePhone(phone: string): string {
-  const cleaned = phone.replace(/[\s\-()]/g, "");
+  const cleaned = phone.replace(/[\s\-\(\)\.]/g, "");
+  if (cleaned.startsWith("+")) return cleaned;
+  if (cleaned.startsWith("61")) return "+" + cleaned;
+  if (cleaned.startsWith("0")) return "+61" + cleaned.slice(1);
   return cleaned;
 }
 
