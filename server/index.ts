@@ -7,6 +7,7 @@ import { WebhookHandlers } from './webhookHandlers';
 import { db } from './db';
 import { users, settings, smsTemplates, missedCalls, jobs, DEFAULT_SERVICES } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+import { ensureSalesSettingsRow } from './sales-flow';
 import bcrypt from 'bcryptjs';
 import * as fs from "fs";
 import * as path from "path";
@@ -356,6 +357,37 @@ async function bootstrapDefaultUser() {
 }
 
 
+async function bootstrapOperator() {
+  try {
+    const email = process.env.OPERATOR_EMAIL || 'operator@tradiecatch.com';
+    const password = process.env.OPERATOR_PASSWORD || 'operator123456';
+
+    const existing = await db.select().from(users).where(eq(users.email, email));
+    if (existing.length > 0) {
+      // Ensure isOperator flag is set
+      if (!existing[0].isOperator) {
+        await db.update(users).set({ isOperator: true }).where(eq(users.id, existing[0].id));
+        log(`Bootstrap: Set isOperator=true for existing ${email}`);
+      }
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    await db.insert(users).values({
+      email,
+      username: 'Operator',
+      password: hashedPassword,
+      isOperator: true,
+    });
+    log(`Bootstrap: Created operator account ${email}`);
+
+    await ensureSalesSettingsRow();
+    log('Bootstrap: Sales settings singleton ensured');
+  } catch (err) {
+    console.error('bootstrapOperator error:', err);
+  }
+}
+
 async function initStripe() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -418,6 +450,13 @@ async function initStripe() {
   setupBodyParsing(app);
   setupRequestLogging(app);
 
+  // Sales operator portal — served BEFORE the Expo static catch-all so these
+  // routes take priority over web-build/index.html.
+  const tplDir = path.resolve(process.cwd(), "server", "templates");
+  app.get("/sales-login", (_req, res) => res.sendFile(path.join(tplDir, "sales-login.html")));
+  app.get("/sales", (_req, res) => res.sendFile(path.join(tplDir, "sales-portal.html")));
+  app.get("/sales/{*path}", (_req, res) => res.sendFile(path.join(tplDir, "sales-portal.html")));
+
   configureExpoAndLanding(app);
 
   const server = await registerRoutes(app);
@@ -434,6 +473,7 @@ async function initStripe() {
     () => {
       log(`express server serving on port ${port}`);
       bootstrapDefaultUser()
+        .then(() => bootstrapOperator())
         .then(() => initStripe())
         .catch(err => console.error('Startup init error (non-fatal):', err));
     },

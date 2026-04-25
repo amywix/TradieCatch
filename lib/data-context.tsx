@@ -18,6 +18,9 @@ export interface MissedCall {
   isUrgent: boolean;
   callerEmail: string | null;
   conversationLog: Array<{ role: string; message: string; timestamp: string }>;
+  voicemailData?: string | null;
+  voicemailDurationSeconds?: string | null;
+  voicemailMimeType?: string | null;
 }
 
 export interface Job {

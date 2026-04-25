@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
@@ -19,9 +19,29 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   usePushNotifications();
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
+
+  // Capture window.location.pathname synchronously at first render (before any routing).
+  // This is the only reliable way to detect the initial URL on web before expo-router
+  // has had a chance to update the pathname hook.
+  const initialPath = useRef(
+    typeof window !== 'undefined' ? window.location.pathname : ''
+  ).current;
+
+  const isSalesPath = (p: string) =>
+    p.startsWith('/sales-login') || p.startsWith('/sales');
+
+  // True if the user is on a sales page.
+  // Use initialPath as a fallback only when expo-router hasn't resolved the pathname yet
+  // (pathname is empty or root "/") to prevent the auth redirect from firing before
+  // expo-router has had a chance to read the real URL from window.location.
+  const pathnameResolved = pathname !== '' && pathname !== '/';
+  const isOnSalesPage =
+    isSalesPath(pathname) ||
+    (!pathnameResolved && isSalesPath(initialPath));
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || isOnSalesPage) return;
 
     const first = segments[0] || '';
     const onLoginScreen = first === 'login';
@@ -31,7 +51,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     } else if (isAuthenticated && onLoginScreen) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, segments]);
+  }, [isAuthenticated, isLoading, segments, isOnSalesPage]);
 
   return <>{children}</>;
 }
@@ -48,6 +68,8 @@ function RootLayoutNav() {
       <Stack.Screen name="add-call" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="edit-template" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="conversation" options={{ headerShown: false }} />
+      <Stack.Screen name="sales-login" options={{ headerShown: false }} />
+      <Stack.Screen name="sales" options={{ headerShown: false }} />
     </Stack>
   );
 }

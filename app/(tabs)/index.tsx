@@ -1,12 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, Pressable, Platform, Alert, RefreshControl, ActivityIndicator,
+  View, Text, StyleSheet, FlatList, Pressable, Platform, Alert, RefreshControl, ActivityIndicator, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { getApiUrl } from '@/lib/query-client';
 import { useData, MissedCall } from '@/lib/data-context';
 import { formatTimeAgo, formatTime, getInitials, getAvatarColor } from '@/lib/helpers';
 
@@ -140,6 +141,24 @@ function CallItem({ item, onSendAutoSms, onBookJob, onDelete, onViewConvo, sendi
           <Feather name="trash-2" size={15} color={Colors.textTertiary} />
         </Pressable>
       </View>
+      {!!item.voicemailData && (
+        <Pressable
+          style={styles.voicemailBtn}
+          onPress={() => {
+            const base = getApiUrl();
+            const url = `${base}api/voicemail/${item.id}`;
+            Linking.openURL(url).catch(() =>
+              Alert.alert('Error', 'Could not open voicemail.')
+            );
+          }}
+          hitSlop={8}
+        >
+          <Ionicons name="mic-outline" size={14} color={Colors.accent} />
+          <Text style={styles.voicemailText}>
+            Play voicemail{item.voicemailDurationSeconds ? ` (${item.voicemailDurationSeconds}s)` : ''}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -479,6 +498,24 @@ const styles = StyleSheet.create({
   actionBtnDanger: {
     marginLeft: 'auto',
     padding: 8,
+  },
+  voicemailBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 6,
+    backgroundColor: Colors.primaryLight + '22',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.accent + '44',
+    alignSelf: 'flex-start',
+  },
+  voicemailText: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.accent,
   },
   emptyState: {
     alignItems: 'center',

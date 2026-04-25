@@ -1,11 +1,15 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import * as path from "path";
+import * as fs from "fs";
 import { db } from "./db";
 import { sql as rawSql } from "drizzle-orm";
 import { missedCalls, jobs, settings, smsTemplates, users, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, desc, and, not, SQL } from "drizzle-orm";
-import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
-import { register, login, getMe, requireAuth, type AuthRequest } from "./auth";
+import { sendInitialMissedCallSms, handleIncomingReply, triggerCustomerExperienceDemo } from "./sms-conversation";
+import { register, login, getMe, requireAuth, requireOperator, type AuthRequest } from "./auth";
+import { leads, leadMessages, salesSettings } from "@shared/schema";
+import { handleSalesReply, sendIntroSms, sendManualSms, ensureSalesSettingsRow } from "./sales-flow";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 function paramId(req: Request | AuthRequest): string {
@@ -276,6 +280,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(`Incoming SMS from ${from} to ${to}: ${body}`);
 
     try {
+      // Sales pipeline: if the sender is a known lead, route to sales flow first
+      const handledBySales = await handleSalesReply(from, to, body);
+      if (handledBySales) {
+        res.set("Content-Type", "text/xml");
+        res.send("<Response></Response>");
+        return;
+      }
+
+      // "DEMO" keyword: if someone texts this magic word with no active
+      // conversation, kick off the full automated customer-experience bot
+      // so potential clients can see exactly what their customers would experience.
+      if (body.trim().toLowerCase() === "demo") {
+        const triggered = await triggerCustomerExperienceDemo(from, to);
+        if (triggered) {
+          res.set("Content-Type", "text/xml");
+          res.send("<Response></Response>");
+          return;
+        }
+        // If already mid-conversation, fall through to handleIncomingReply
+      }
+
       await handleIncomingReply(from, body, to);
     } catch (err) {
       console.error("Webhook handler error:", err);
@@ -824,6 +849,197 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
 
+
+  // ─── Sales Pipeline API ──────────────────────────────────────────────────────
+
+  // Ensure singleton settings row exists on startup
+  ensureSalesSettingsRow().catch(err => console.error("ensureSalesSettingsRow error:", err));
+
+  // Sales settings
+  app.get("/api/sales/settings", requireOperator as any, async (_req: Request, res: Response) => {
+    const rows = await db.select().from(salesSettings).where(eq(salesSettings.id, "singleton"));
+    res.json(rows[0] || {});
+  });
+
+  app.patch("/api/sales/settings", requireOperator as any, async (req: Request, res: Response) => {
+    const { demoVideoUrl, calendlyUrl, twilioAccountSid, twilioAuthToken, twilioPhoneNumber, setupFeeAmount } = req.body;
+    const rows = await db.select().from(salesSettings).where(eq(salesSettings.id, "singleton"));
+    const patch: Record<string, any> = { updatedAt: new Date() };
+    if (demoVideoUrl !== undefined) patch.demoVideoUrl = demoVideoUrl;
+    if (calendlyUrl !== undefined) patch.calendlyUrl = calendlyUrl;
+    if (twilioAccountSid !== undefined) patch.twilioAccountSid = twilioAccountSid;
+    if (twilioAuthToken !== undefined) patch.twilioAuthToken = twilioAuthToken;
+    if (twilioPhoneNumber !== undefined) patch.twilioPhoneNumber = twilioPhoneNumber;
+    if (setupFeeAmount !== undefined) patch.setupFeeAmount = Number(setupFeeAmount);
+    if (rows.length === 0) {
+      const [row] = await db.insert(salesSettings).values({ id: "singleton", ...patch }).returning();
+      return res.json(row);
+    }
+    const [row] = await db.update(salesSettings).set(patch).where(eq(salesSettings.id, "singleton")).returning();
+    res.json(row);
+  });
+
+  // Leads CRUD
+  app.get("/api/sales/leads", requireOperator as any, async (_req: Request, res: Response) => {
+    const rows = await db.select().from(leads).orderBy(desc(leads.createdAt));
+    res.json(rows);
+  });
+
+  app.post("/api/sales/leads", requireOperator as any, async (req: Request, res: Response) => {
+    const { name, phone, email, address, jobNotes } = req.body;
+    if (!name || !phone) return res.status(400).json({ error: "name and phone required" });
+    const [row] = await db.insert(leads).values({
+      name, phone, email: email || "", address: address || "", jobNotes: jobNotes || "",
+    }).returning();
+    res.json(row);
+  });
+
+  app.get("/api/sales/leads/:id", requireOperator as any, async (req: Request, res: Response) => {
+    const [row] = await db.select().from(leads).where(eq(leads.id, req.params.id));
+    if (!row) return res.status(404).json({ error: "Lead not found" });
+    res.json(row);
+  });
+
+  app.patch("/api/sales/leads/:id", requireOperator as any, async (req: Request, res: Response) => {
+    const allowed = ["name","phone","email","address","jobNotes","stage","paid","outcome","calendlyEventTime","calendlyEventUri"];
+    const patch: Record<string, any> = { updatedAt: new Date() };
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) patch[key] = req.body[key];
+    }
+    const [row] = await db.update(leads).set(patch).where(eq(leads.id, req.params.id)).returning();
+    if (!row) return res.status(404).json({ error: "Lead not found" });
+    res.json(row);
+  });
+
+  app.delete("/api/sales/leads/:id", requireOperator as any, async (req: Request, res: Response) => {
+    await db.delete(leadMessages).where(eq(leadMessages.leadId, req.params.id));
+    await db.delete(leads).where(eq(leads.id, req.params.id));
+    res.json({ ok: true });
+  });
+
+  // Lead messages
+  app.get("/api/sales/leads/:id/messages", requireOperator as any, async (req: Request, res: Response) => {
+    const rows = await db.select().from(leadMessages)
+      .where(eq(leadMessages.leadId, req.params.id))
+      .orderBy(leadMessages.createdAt);
+    res.json(rows);
+  });
+
+  // Send intro SMS to a lead
+  app.post("/api/sales/leads/:id/send-intro", requireOperator as any, async (req: Request, res: Response) => {
+    try {
+      await sendIntroSms(req.params.id);
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("send-intro error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Send a manual SMS to a lead
+  app.post("/api/sales/leads/:id/send-sms", requireOperator as any, async (req: Request, res: Response) => {
+    const { body } = req.body;
+    if (!body) return res.status(400).json({ error: "body required" });
+    try {
+      await sendManualSms(req.params.id, body);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Create Stripe checkout for sales setup fee
+  app.post("/api/sales/leads/:id/create-payment-link", requireOperator as any, async (req: Request, res: Response) => {
+    try {
+      const [lead] = await db.select().from(leads).where(eq(leads.id, req.params.id));
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+      const [salesConfig] = await db.select().from(salesSettings).where(eq(salesSettings.id, "singleton"));
+      const stripe = await getUncachableStripeClient();
+      const amountCents = (salesConfig?.setupFeeAmount ?? 299) * 100;
+
+      const domains = process.env.REPLIT_DOMAINS || "";
+      const primaryDomain = domains.split(",")[0]?.trim() || "";
+      const baseUrl = primaryDomain ? `https://${primaryDomain}` : `${req.protocol}://${req.get("host")}`;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency: "aud",
+            product_data: { name: "TradieCatch Setup Fee", description: "One-time onboarding & setup fee" },
+            unit_amount: amountCents,
+          },
+        }],
+        mode: "payment",
+        metadata: { type: "sales_setup_fee", leadId: lead.id },
+        success_url: `${baseUrl}/sales/${lead.id}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/sales/${lead.id}?payment=cancelled`,
+        customer_email: lead.email || undefined,
+      });
+
+      await db.update(leads).set({ stripeSessionId: session.id, updatedAt: new Date() }).where(eq(leads.id, lead.id));
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("create-payment-link error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Verify a Stripe payment for a lead (called after success_url redirect)
+  app.post("/api/sales/leads/:id/verify-payment", requireOperator as any, async (req: Request, res: Response) => {
+    try {
+      const [lead] = await db.select().from(leads).where(eq(leads.id, req.params.id));
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+      const sessionId = req.body.sessionId || lead.stripeSessionId;
+      if (!sessionId) return res.status(400).json({ error: "No session ID" });
+
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.payment_status === "paid") {
+        const [updated] = await db.update(leads)
+          .set({ paid: true, stage: "proposal", updatedAt: new Date() })
+          .where(eq(leads.id, lead.id))
+          .returning();
+        return res.json({ paid: true, lead: updated });
+      }
+      res.json({ paid: false });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Calendly webhook for sales (books a demo with a lead)
+  app.post("/api/sales/calendly-webhook", async (req: Request, res: Response) => {
+    try {
+      const event = req.body.event || req.body.payload?.event_type?.name || "";
+      const invitee = req.body.payload?.invitee || req.body.payload || {};
+      const phone = (invitee.text_reminder_number || invitee.questions_and_answers?.[0]?.answer || "").replace(/\s+/g, "");
+      const startTime = req.body.payload?.scheduled_event?.start_time || req.body.payload?.event_start_time || "";
+      const uri = req.body.payload?.scheduled_event?.uri || "";
+
+      if (phone) {
+        const [lead] = await db.select().from(leads).where(eq(leads.phone, phone));
+        if (lead) {
+          await db.update(leads).set({
+            stage: "demo",
+            calendlyEventTime: startTime,
+            calendlyEventUri: uri,
+            updatedAt: new Date(),
+          }).where(eq(leads.id, lead.id));
+        }
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("Sales Calendly webhook error:", err);
+      res.json({ ok: false });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
 
   const httpServer = createServer(app);
   return httpServer;

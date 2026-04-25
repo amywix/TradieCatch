@@ -764,6 +764,46 @@ export async function handleDemoSmsFlow(fromPhone: string, body: string, toPhone
   return response;
 }
 
+/**
+ * Called when someone texts "DEMO" with no existing active conversation.
+ * Creates a missed call record and fires the full automated customer-experience
+ * bot at them — so they see exactly what their own customers would experience.
+ */
+export async function triggerCustomerExperienceDemo(fromPhone: string, toPhone: string): Promise<boolean> {
+  // Find which tradie owns this Twilio number
+  const userIds = await findUsersByTwilioNumber(toPhone);
+  if (userIds.length === 0) {
+    console.log(`DEMO trigger: no tradie found for toPhone ${toPhone}`);
+    return false;
+  }
+  const userId = userIds[0];
+
+  // Don't create a duplicate if there's already an active conversation
+  const existing = await db.select().from(missedCalls)
+    .where(and(eq(missedCalls.userId, userId), eq(missedCalls.phoneNumber, normalizePhone(fromPhone))))
+    .orderBy(desc(missedCalls.timestamp));
+
+  const TERMINAL_STATES = new Set(["none", "completed", "demo_completed"]);
+  const hasActive = existing.some(c => !TERMINAL_STATES.has(c.conversationState));
+  if (hasActive) {
+    console.log(`DEMO trigger: active conversation already exists for ${fromPhone}`);
+    return false;
+  }
+
+  // Create the missed call record
+  const [newCall] = await db.insert(missedCalls).values({
+    userId,
+    callerName: "Demo Visitor",
+    phoneNumber: normalizePhone(fromPhone),
+    timestamp: new Date(),
+  }).returning();
+
+  // Fire the full automated customer-experience bot
+  await sendInitialMissedCallSms(newCall.id, userId);
+  console.log(`DEMO trigger: started customer experience for ${fromPhone} under user ${userId}`);
+  return true;
+}
+
 function normalizePhone(phone: string): string {
   const cleaned = phone.replace(/[\s\-()]/g, "");
   return cleaned;
