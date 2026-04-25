@@ -41,6 +41,8 @@ export default function SettingsScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [hasServerRecording, setHasServerRecording] = useState(false);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const webFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isWebUploading, setIsWebUploading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -207,6 +209,27 @@ export default function SettingsScreen() {
         },
       ]
     );
+  }, []);
+
+  const handleWebFileUpload = useCallback(async (file: File) => {
+    setIsWebUploading(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => { const b64 = (reader.result as string).split(',')[1]; resolve(b64); };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await apiRequest('POST', '/api/settings/voice-recording', { audioBase64: base64, mimeType: file.type || 'audio/mpeg' });
+      if (!res.ok) throw new Error('Upload failed');
+      setHasServerRecording(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert('Error', 'Could not upload recording. Please try a different file.');
+    } finally {
+      setIsWebUploading(false);
+      if (webFileInputRef.current) webFileInputRef.current.value = '';
+    }
   }, []);
 
   const services = settings.services || [];
@@ -932,11 +955,36 @@ export default function SettingsScreen() {
               </View>
             )}
 
-            {/* Web fallback */}
+            {/* Web: file upload */}
             {Platform.OS === 'web' && !hasServerRecording && (
               <View style={{ marginTop: 12 }}>
+                <Text style={[styles.settingDescription, { marginBottom: 10 }]}>
+                  Upload an audio file (MP3, M4A, WAV) recorded on your phone or computer:
+                </Text>
+                {/* Hidden native file input */}
+                {/* @ts-ignore — web-only element */}
+                <input
+                  ref={webFileInputRef}
+                  type="file"
+                  accept="audio/*"
+                  style={{ display: 'none' }}
+                  onChange={(e: any) => {
+                    const file = e.target?.files?.[0];
+                    if (file) handleWebFileUpload(file);
+                  }}
+                />
+                <Pressable
+                  style={[styles.recordButton, { marginBottom: 16 }, isWebUploading && { opacity: 0.6 }]}
+                  onPress={() => webFileInputRef.current?.click()}
+                  disabled={isWebUploading}
+                >
+                  {isWebUploading
+                    ? <ActivityIndicator color={Colors.white} size="small" />
+                    : <Ionicons name="cloud-upload-outline" size={22} color={Colors.white} />}
+                  <Text style={styles.recordButtonText}>{isWebUploading ? 'Uploading…' : 'Upload Audio File'}</Text>
+                </Pressable>
                 <Text style={[styles.settingDescription, { marginBottom: 8 }]}>
-                  Voice recording is available in the mobile app. On web, set a text message:
+                  Or use a text greeting instead:
                 </Text>
                 <TextInput
                   style={styles.editInput}
