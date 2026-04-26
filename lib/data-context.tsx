@@ -57,6 +57,7 @@ export interface AppSettings {
   bookingProvider?: 'manual' | 'calendly' | 'google';
   calendlyLink?: string;
   googleCalendarLink?: string;
+  conversationMessages?: Record<string, string>;
 }
 
 interface DataContextValue {

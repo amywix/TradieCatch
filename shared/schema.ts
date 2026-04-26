@@ -80,6 +80,18 @@ export const DEFAULT_SERVICES = [
   "Other",
 ];
 
+export const DEFAULT_CONVERSATION_MESSAGES: Record<string, string> = {
+  greeting_missed_call: "Hi! Sorry we missed your call!{businessLine}\n\nCan we grab your name to get started?",
+  greeting_demo: "Hi! Thanks for reaching out!{businessLine}\n\nCan we grab your name to get started?",
+  service_intro: "Thanks {name}! What can we help you with today?\n\nReply with the number below:\n\n{menu}",
+  address_request: "Great! {service}.\n\nWhat's the address for the job?",
+  email_request: "Almost done! What's the best email address to send confirmation and updates to?",
+  time_preference: "Thanks! And what's the best time:\n1. Morning\n2. Afternoon\n3. ASAP",
+  booked_manual: "All locked in! {dateTime}.\n\nWe've confirmed your appointment.{urgentNote}\n\n- {businessName}",
+  booked_link: "Thanks! Pick a time that suits you here and we'll be locked in:\n\n{link}\n\nWe'll get a confirmation as soon as you book.{urgentNote}\n\n- {businessName}",
+  followup_complete: "Thanks for reaching out! We'll be in touch soon.\n\n- {businessName}",
+};
+
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().unique(),
@@ -105,6 +117,7 @@ export const settings = pgTable("settings", {
   tradieMobileNumber: text("tradie_mobile_number").default(""),
   forwardingMode: text("forwarding_mode").default("carrier_forward").notNull(),
   voicemailEnabled: boolean("voicemail_enabled").default(true).notNull(),
+  conversationMessages: jsonb("conversation_messages").$type<Record<string, string>>().default({}),
 });
 
 // ─── Sales Pipeline ──────────────────────────────────────────────────────────

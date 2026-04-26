@@ -299,6 +299,77 @@ export default function SettingsScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [updateAppSettings, voiceMessage]);
 
+  // ── Message Bank ──────────────────────────────────────────────────────────
+  const DEFAULT_MSGS: Record<string, string> = {
+    greeting_missed_call: "Hi! Sorry we missed your call!{businessLine}\n\nCan we grab your name to get started?",
+    greeting_demo: "Hi! Thanks for reaching out!{businessLine}\n\nCan we grab your name to get started?",
+    service_intro: "Thanks {name}! What can we help you with today?\n\nReply with the number below:\n\n{menu}",
+    address_request: "Great! {service}.\n\nWhat's the address for the job?",
+    email_request: "Almost done! What's the best email address to send confirmation and updates to?",
+    time_preference: "Thanks! And what's the best time:\n1. Morning\n2. Afternoon\n3. ASAP",
+    booked_manual: "All locked in! {dateTime}.\n\nWe've confirmed your appointment.{urgentNote}\n\n- {businessName}",
+    booked_link: "Thanks! Pick a time that suits you here and we'll be locked in:\n\n{link}\n\nWe'll get a confirmation as soon as you book.{urgentNote}\n\n- {businessName}",
+    followup_complete: "Thanks for reaching out! We'll be in touch soon.\n\n- {businessName}",
+  };
+  const MSG_LABELS: Record<string, { label: string; hint: string }> = {
+    greeting_missed_call: { label: 'Missed Call Greeting', hint: 'Use {businessName} or {businessLine} ("\\nThis is Name.")' },
+    greeting_demo: { label: 'Demo / Text Trigger Greeting', hint: 'Sent when someone texts the word "Demo". Use {businessName}' },
+    service_intro: { label: 'Service Selection Intro', hint: 'Use {name} for customer\'s name and {menu} for services list' },
+    address_request: { label: 'Address Request', hint: 'Use {service} for the chosen service' },
+    email_request: { label: 'Email Request', hint: 'Sent after address is collected' },
+    time_preference: { label: 'Time Preference', hint: 'Shown when no booking calendar. Edit the 3 options as needed' },
+    booked_manual: { label: 'Booking Confirmation (Manual)', hint: 'Use {dateTime}, {urgentNote}, {businessName}' },
+    booked_link: { label: 'Booking Confirmation (Calendar Link)', hint: 'Sent when Calendly/Google Calendar is enabled. Use {link}, {urgentNote}, {businessName}' },
+    followup_complete: { label: 'After-Booking Follow-up', hint: 'Sent if customer replies after booking. Use {businessName}' },
+  };
+  const currentMsgs: Record<string, string> = { ...DEFAULT_MSGS, ...(settings.conversationMessages || {}) };
+  const [showMsgModal, setShowMsgModal] = useState(false);
+  const [editingMsgKey, setEditingMsgKey] = useState<string>('');
+  const [editingMsgText, setEditingMsgText] = useState('');
+  const [msgSaving, setMsgSaving] = useState(false);
+
+  const openMsgEdit = useCallback((key: string) => {
+    setEditingMsgKey(key);
+    setEditingMsgText(currentMsgs[key] || DEFAULT_MSGS[key] || '');
+    setShowMsgModal(true);
+  }, [currentMsgs]);
+
+  const handleSaveMsg = useCallback(async () => {
+    if (!editingMsgKey) return;
+    const trimmed = editingMsgText.trim();
+    if (!trimmed) return;
+    setMsgSaving(true);
+    try {
+      const updated = { ...(settings.conversationMessages || {}), [editingMsgKey]: trimmed };
+      await updateAppSettings({ conversationMessages: updated });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowMsgModal(false);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Could not save message.');
+    } finally {
+      setMsgSaving(false);
+    }
+  }, [editingMsgKey, editingMsgText, settings.conversationMessages, updateAppSettings]);
+
+  const handleResetMsg = useCallback(async () => {
+    if (!editingMsgKey) return;
+    Alert.alert('Reset to Default', 'Restore this message to the original default text?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset', style: 'destructive', onPress: async () => {
+          const defaultText = DEFAULT_MSGS[editingMsgKey] || '';
+          setEditingMsgText(defaultText);
+          const stored = { ...(settings.conversationMessages || {}) };
+          delete stored[editingMsgKey];
+          await updateAppSettings({ conversationMessages: stored }).catch(() => {});
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setShowMsgModal(false);
+        }
+      },
+    ]);
+  }, [editingMsgKey, settings.conversationMessages, updateAppSettings]);
+
+  // ── Twilio ─────────────────────────────────────────────────────────────────
   const [showTwilioModal, setShowTwilioModal] = useState(false);
   const [twilioSid, setTwilioSid] = useState(settings.twilioAccountSid || '');
   const [twilioToken, setTwilioToken] = useState(settings.twilioAuthToken || '');
@@ -745,6 +816,99 @@ export default function SettingsScreen() {
             </View>
           </View>
         </View>
+
+        {/* ── Message Bank ────────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Message Bank</Text>
+          <Text style={[styles.sectionHint, { marginBottom: 4 }]}>Edit every SMS your customers receive. Tap a message to customise it.</Text>
+          <View style={styles.card}>
+            {Object.keys(DEFAULT_MSGS).map((key, idx, arr) => {
+              const info = MSG_LABELS[key];
+              const isCustomised = !!(settings.conversationMessages?.[key]);
+              return (
+                <React.Fragment key={key}>
+                  <Pressable style={styles.settingRow} onPress={() => openMsgEdit(key)}>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.settingLabel}>{info?.label ?? key}</Text>
+                        {isCustomised && (
+                          <View style={{ backgroundColor: Colors.accent + '22', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
+                            <Text style={{ fontSize: 10, color: Colors.accent, fontFamily: 'Inter_600SemiBold' }}>CUSTOM</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.settingDescription} numberOfLines={2}>
+                        {currentMsgs[key].replace(/\{[^}]+\}/g, '…').replace(/\n/g, ' ').trim()}
+                      </Text>
+                    </View>
+                    <Feather name="edit-2" size={16} color={Colors.textTertiary} />
+                  </Pressable>
+                  {idx < arr.length - 1 && <View style={styles.flowDivider} />}
+                </React.Fragment>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Message Edit Modal */}
+        <Modal visible={showMsgModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowMsgModal(false)}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <View style={{ flex: 1, backgroundColor: Colors.background }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+                <Pressable onPress={() => setShowMsgModal(false)}>
+                  <Text style={{ color: Colors.textSecondary, fontFamily: 'Inter_500Medium', fontSize: 15 }}>Cancel</Text>
+                </Pressable>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.text }}>
+                  {MSG_LABELS[editingMsgKey]?.label ?? editingMsgKey}
+                </Text>
+                <Pressable onPress={handleSaveMsg} disabled={msgSaving}>
+                  {msgSaving ? (
+                    <ActivityIndicator size="small" color={Colors.accent} />
+                  ) : (
+                    <Text style={{ color: Colors.accent, fontFamily: 'Inter_700Bold', fontSize: 15 }}>Save</Text>
+                  )}
+                </Pressable>
+              </View>
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 12 }}>
+                {editingMsgKey && MSG_LABELS[editingMsgKey]?.hint ? (
+                  <View style={{ backgroundColor: Colors.surface, borderRadius: 10, padding: 12 }}>
+                    <Text style={{ color: Colors.accent, fontFamily: 'Inter_600SemiBold', fontSize: 12, marginBottom: 4 }}>Available variables</Text>
+                    <Text style={{ color: Colors.textSecondary, fontFamily: 'Inter_400Regular', fontSize: 13 }}>
+                      {MSG_LABELS[editingMsgKey].hint}
+                    </Text>
+                  </View>
+                ) : null}
+                <TextInput
+                  style={{
+                    backgroundColor: Colors.surface,
+                    borderRadius: 12,
+                    padding: 14,
+                    color: Colors.text,
+                    fontFamily: 'Inter_400Regular',
+                    fontSize: 15,
+                    minHeight: 180,
+                    textAlignVertical: 'top',
+                    borderWidth: 1,
+                    borderColor: Colors.border,
+                  }}
+                  value={editingMsgText}
+                  onChangeText={setEditingMsgText}
+                  multiline
+                  autoFocus
+                  placeholder="Enter message text..."
+                  placeholderTextColor={Colors.textTertiary}
+                />
+                <Pressable
+                  onPress={handleResetMsg}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 12 }}
+                >
+                  <Feather name="rotate-ccw" size={14} color={Colors.textTertiary} />
+                  <Text style={{ color: Colors.textTertiary, fontFamily: 'Inter_500Medium', fontSize: 13 }}>Reset to default</Text>
+                </Pressable>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>

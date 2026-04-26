@@ -1,6 +1,6 @@
 import twilio from "twilio";
 import { db } from "./db";
-import { missedCalls, jobs, settings, DEFAULT_SERVICES } from "@shared/schema";
+import { missedCalls, jobs, settings, DEFAULT_SERVICES, DEFAULT_CONVERSATION_MESSAGES } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { sendPushToUser } from "./push";
 
@@ -12,6 +12,18 @@ const CALENDLY_BOOKING_URL = "https://calendly.com/amywickham-dgbh/video-session
 
 // Time slots offered for the 10-minute setup call (legacy fallback)
 const DEMO_CALL_TIMES = ["9:00 AM", "10:00 AM", "11:00 AM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
+
+/** Load the tradie's custom conversation messages, falling back to defaults for any missing key */
+async function getConversationMessages(userId: string): Promise<Record<string, string>> {
+  const s = await getSettingsForUser(userId);
+  const stored = ((s as any)?.conversationMessages as Record<string, string>) || {};
+  return { ...DEFAULT_CONVERSATION_MESSAGES, ...stored };
+}
+
+/** Replace {variable} placeholders in a template string */
+function fillTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{(\w+)\}/g, (_, key) => (key in vars ? vars[key] : `{${key}}`));
+}
 
 async function getSettingsForUser(userId: string) {
   const rows = await db.select().from(settings).where(eq(settings.userId, userId));
@@ -121,17 +133,21 @@ export async function sendSms(to: string, body: string, userId: string): Promise
   }
 }
 
-export async function sendInitialMissedCallSms(callId: string, userId: string): Promise<void> {
+export async function sendInitialMissedCallSms(
+  callId: string,
+  userId: string,
+  source: 'missed_call' | 'demo' = 'missed_call'
+): Promise<void> {
   const rows = await db.select().from(missedCalls).where(eq(missedCalls.id, callId));
   const call = rows[0];
   if (!call) throw new Error("Call not found");
 
   const { businessName } = await getTwilioConfig(userId);
-  const servicesList = await getServices(userId);
-  const menuText = buildServicesMenuText(servicesList);
-
+  const msgs = await getConversationMessages(userId);
   const businessLine = businessName ? `\nThis is ${businessName}.` : "";
-  const message = `Hi! Sorry we missed your call!${businessLine}\n\nCan we grab your name to get started?`;
+
+  const templateKey = source === 'demo' ? 'greeting_demo' : 'greeting_missed_call';
+  const message = fillTemplate(msgs[templateKey], { businessLine, businessName });
 
   await sendSms(call.phoneNumber, message, userId);
 
@@ -252,12 +268,13 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
   const SERVICES = buildServicesMap(servicesList);
   const maxChoice = servicesList.length;
   const choiceRegex = new RegExp(`[^1-${maxChoice}]`, "g");
+  const msgs = await getConversationMessages(callUserId);
 
   switch (state) {
     case "awaiting_name": {
       updates.callerName = reply;
       const menuText = buildServicesMenuText(servicesList);
-      response = `Thanks ${reply}! What can we help you with today?\n\nReply with the number below:\n\n${menuText}`;
+      response = fillTemplate(msgs.service_intro, { name: reply, menu: menuText });
       newState = "awaiting_service";
       break;
     }
@@ -276,7 +293,7 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
           response = `No worries! Please type a brief description of what you need help with and we'll get back to you.`;
           newState = "awaiting_other_description";
         } else {
-          response = `Great! ${service}.\n\nWhat's the address for the job?`;
+          response = fillTemplate(msgs.address_request, { service });
           newState = "awaiting_address";
         }
       } else {
@@ -292,7 +309,7 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
       if (option === "A" || option === "B") {
         const subDesc = option === "A" ? "New install (no existing fan)" : "Replacement of old fan";
         updates.selectedSubOption = subDesc;
-        response = `Perfect! ${subDesc}.\n\nWhat's the address for the job?`;
+        response = fillTemplate(msgs.address_request, { service: subDesc });
         newState = "awaiting_address";
       } else {
         response = `Please reply A or B:\n\nA) New install (no existing fan)\nB) Replacement of old fan`;
@@ -309,7 +326,7 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
         newState = "awaiting_address";
       } else if (upper.includes("NO") || upper.includes("WAIT") || upper.includes("LATER")) {
         updates.isUrgent = false;
-        response = `No worries, we'll schedule you in.\n\nWhat's the address for the job?`;
+        response = fillTemplate(msgs.address_request, { service: call.selectedService || "your job" });
         newState = "awaiting_address";
       } else {
         response = `Please reply YES if this is urgent, or NO if it can wait.`;
@@ -320,14 +337,14 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
 
     case "awaiting_other_description": {
       updates.selectedService = `Other: ${reply}`;
-      response = `Got it!\n\nWhat's the address for the job?`;
+      response = fillTemplate(msgs.address_request, { service: `Other: ${reply}` });
       newState = "awaiting_address";
       break;
     }
 
     case "awaiting_address": {
       updates.jobAddress = reply;
-      response = `Almost done! What's the best email address to send confirmation and updates to?`;
+      response = fillTemplate(msgs.email_request, {});
       newState = "awaiting_email";
       break;
     }
@@ -340,7 +357,8 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
         if (booking.enabled && booking.externalLink) {
           const { businessName } = await getTwilioConfig(callUserId);
           const providerName = booking.provider === "calendly" ? "Calendly" : "Google Calendar";
-          response = `Thanks! Pick a time that suits you here and we'll be locked in:\n\n${booking.externalLink}\n\nWe'll get a confirmation as soon as you book.${call.isUrgent || updates.isUrgent ? "\n\nMarked as urgent — we'll prioritise this." : ""}\n\n- ${businessName}`;
+          const urgentNote = (call.isUrgent || updates.isUrgent) ? "\n\nMarked as urgent — we'll prioritise this." : "";
+          response = fillTemplate(msgs.booked_link, { link: booking.externalLink, urgentNote, businessName });
           newState = "completed";
           updates.selectedTime = `Booking link sent (${providerName})`;
           updates.jobBooked = false;
@@ -350,7 +368,7 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
           response = `Thanks! What day works best for you?\n\n${dateMenu}`;
           newState = "awaiting_booking_date";
         } else {
-          response = `Thanks! And what's the best time:\n1. Morning\n2. Afternoon\n3. ASAP`;
+          response = fillTemplate(msgs.time_preference, {});
           newState = "awaiting_time";
         }
       } else {
@@ -392,7 +410,8 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
         updates.selectedTime = `${dateLabel} ${timeSlot}`;
 
         const { businessName } = await getTwilioConfig(callUserId);
-        response = `Booked! ${dateLabel} at ${timeSlot}.\n\nWe've confirmed your appointment.${call.isUrgent || updates.isUrgent ? "\n\nMarked as urgent - we'll prioritise this." : ""}\n\n- ${businessName}`;
+        const urgentNote = (call.isUrgent || updates.isUrgent) ? "\n\nMarked as urgent - we'll prioritise this." : "";
+        response = fillTemplate(msgs.booked_manual, { dateTime: `${dateLabel} at ${timeSlot}`, urgentNote, businessName });
         newState = "completed";
 
         await db.insert(jobs).values({
@@ -441,7 +460,8 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
       updates.selectedTime = timeLabel;
 
       const { businessName } = await getTwilioConfig(callUserId);
-      response = `Thanks! We've received your request.\n\nOur team will confirm your booking shortly.${call.isUrgent || updates.isUrgent ? "\n\nIf urgent, we'll call you ASAP." : ""}\n\n- ${businessName}`;
+      const urgentNote2 = (call.isUrgent || updates.isUrgent) ? "\n\nIf urgent, we'll call you ASAP." : "";
+      response = fillTemplate(msgs.booked_manual, { dateTime: timeLabel, urgentNote: urgentNote2, businessName });
       newState = "completed";
 
       const today = new Date();
@@ -477,7 +497,7 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
 
     case "completed": {
       const { businessName } = await getTwilioConfig(callUserId);
-      response = `Thanks for your message! Your booking is already logged. Our team will be in touch shortly.\n\n- ${businessName}`;
+      response = fillTemplate(msgs.followup_complete, { businessName });
       newState = "completed";
       break;
     }
@@ -799,8 +819,8 @@ export async function triggerCustomerExperienceDemo(fromPhone: string, toPhone: 
     timestamp: new Date(),
   }).returning();
 
-  // Fire the full automated customer-experience bot
-  await sendInitialMissedCallSms(newCall.id, userId);
+  // Fire the full automated customer-experience bot with the demo-specific greeting
+  await sendInitialMissedCallSms(newCall.id, userId, 'demo');
   console.log(`DEMO trigger: started customer experience for ${fromPhone} under user ${userId}`);
   return true;
 }
