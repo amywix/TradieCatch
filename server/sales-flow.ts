@@ -167,6 +167,54 @@ export async function sendManualSms(leadId: string, body: string): Promise<void>
   await db.update(leads).set({ updatedAt: new Date() }).where(eq(leads.id, leadId));
 }
 
+// ─── Demo keyword from a brand-new contact ────────────────────────────────────
+
+/**
+ * Called when someone texts "DEMO" to the operator's sales number for the
+ * very first time (not yet a known lead).  Creates a new lead record and
+ * immediately sends the demo video link + YES prompt.
+ *
+ * Returns true if handled, false if this number isn't the sales number or
+ * the person is already a known lead (handleSalesReply covers that case).
+ */
+export async function handleDemoNewContact(fromPhone: string, toPhone: string): Promise<boolean> {
+  const creds = await getSalesCredentials();
+
+  // Only fire for the operator's own Twilio number
+  const salesNumber = normalizePhone(creds.fromNumber);
+  const toNorm = normalizePhone(toPhone);
+  if (!salesNumber || !toNorm || salesNumber !== toNorm) return false;
+
+  // If already a known lead, handleSalesReply has already handled them
+  const existing = await findLeadByPhone(fromPhone);
+  if (existing) return false;
+
+  // Create the lead at "demo" stage so the Kanban shows them immediately
+  const [newLead] = await db.insert(leads).values({
+    name: `New Lead (${normalizePhone(fromPhone)})`,
+    phone: normalizePhone(fromPhone),
+    stage: "demo",
+  }).returning();
+
+  // Send them the demo video straight away
+  const videoUrl = creds.demoVideoUrl || "https://tradiecatch.com/demo";
+  const body =
+    `Thanks for reaching out! 🎬 Here's your TradieCatch demo:\n\n${videoUrl}\n\n` +
+    `Watch how it automatically captures missed calls and books jobs for tradies.\n\n` +
+    `Reply YES when you're ready to get set up.`;
+
+  const sid = await sendSms(normalizePhone(fromPhone), body);
+
+  await db.insert(leadMessages).values({
+    leadId: newLead.id,
+    direction: "outbound",
+    body,
+    twilioSid: sid ?? "",
+  });
+
+  return true;
+}
+
 // ─── Bootstrap singleton settings row ────────────────────────────────────────
 
 export async function ensureSalesSettingsRow(): Promise<void> {

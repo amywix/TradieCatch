@@ -6,10 +6,10 @@ import { db } from "./db";
 import { sql as rawSql } from "drizzle-orm";
 import { missedCalls, jobs, settings, smsTemplates, users, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, desc, and, not, SQL } from "drizzle-orm";
-import { sendInitialMissedCallSms, handleIncomingReply, triggerCustomerExperienceDemo } from "./sms-conversation";
+import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
 import { register, login, getMe, requireAuth, requireOperator, type AuthRequest } from "./auth";
 import { leads, leadMessages, salesSettings } from "@shared/schema";
-import { handleSalesReply, sendIntroSms, sendManualSms, ensureSalesSettingsRow } from "./sales-flow";
+import { handleSalesReply, sendIntroSms, sendManualSms, ensureSalesSettingsRow, handleDemoNewContact } from "./sales-flow";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 function paramId(req: Request | AuthRequest): string {
@@ -288,17 +288,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // "DEMO" keyword: if someone texts this magic word with no active
-      // conversation, kick off the full automated customer-experience bot
-      // so potential clients can see exactly what their customers would experience.
+      // "DEMO" keyword: only the operator's Twilio number gets this.
+      // A new contact texting DEMO starts the TradieCatch sales conversation
+      // (video link → YES → Calendly booking).  Regular tradie numbers ignore it.
       if (body.trim().toLowerCase() === "demo") {
-        const triggered = await triggerCustomerExperienceDemo(from, to);
+        const triggered = await handleDemoNewContact(from, to);
         if (triggered) {
           res.set("Content-Type", "text/xml");
           res.send("<Response></Response>");
           return;
         }
-        // If already mid-conversation, fall through to handleIncomingReply
+        // Not the operator's number (or already a known lead handled above) —
+        // fall through to the standard tradie conversation handler.
       }
 
       await handleIncomingReply(from, body, to);
@@ -322,7 +323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!settingsRow) {
       console.log(`No user found for Twilio number: ${to}`);
       res.set("Content-Type", "text/xml");
-      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice">Sorry, this number is not configured.</Say><Hangup/></Response>`);
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Joanna">Sorry, this number is not configured.</Say><Hangup/></Response>`);
       return;
     }
     const userId = settingsRow.userId as string;
@@ -1135,7 +1136,7 @@ async function handleMissedCallAndRespond(
 
   const greetingTwiml = recordingUrl
     ? `<Play>${recordingUrl}</Play>`
-    : `<Say voice="alice">${voiceMessage} Thanks for calling ${businessName}.</Say>`;
+    : `<Say voice="Polly.Joanna">${voiceMessage} Thanks for calling ${businessName}.</Say>`;
 
   if (voicemailEnabled && missedCallId) {
     const recCb = `${baseUrl}/api/twilio/recording-callback?missedCallId=${encodeURIComponent(missedCallId)}`;
@@ -1143,7 +1144,7 @@ async function handleMissedCallAndRespond(
 <Response>
   ${greetingTwiml}
   <Record action="${recCb}" method="POST" recordingStatusCallback="${recCb}" recordingStatusCallbackMethod="POST" maxLength="120" timeout="5" playBeep="true" finishOnKey="#" trim="trim-silence"/>
-  <Say voice="alice">No message recorded. Goodbye.</Say>
+  <Say voice="Polly.Joanna">No message recorded. Goodbye.</Say>
   <Hangup/>
 </Response>`);
   } else {
