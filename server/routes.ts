@@ -312,43 +312,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/twilio/voice", async (req: Request, res: Response) => {
-    const from = req.body.From || req.body.Caller || "";
-    const to = req.body.To || req.body.Called || "";
-    const callStatus = req.body.CallStatus || "";
-    const callerName = req.body.CallerName || "Unknown Caller";
-
-    console.log(`Incoming call from ${from} to ${to} (status: ${callStatus}, name: ${callerName})`);
-
-    let settingsRow: any = await resolveOwnerSettings(to, from);
-    if (!settingsRow) {
-      console.log(`No user found for Twilio number: ${to}`);
-      res.set("Content-Type", "text/xml");
-      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Joanna">Sorry, this number is not configured.</Say><Hangup/></Response>`);
-      return;
-    }
-    const userId = settingsRow.userId as string;
-    console.log(`Resolved to user ${userId} for Twilio number ${to}`);
-
-    const baseUrl = getPublicBaseUrl(req);
-    const mode = (settingsRow.forwardingMode as string) || "carrier_forward";
-    const tradieMobile = (settingsRow.tradieMobileNumber as string || "").trim();
-
     res.set("Content-Type", "text/xml");
+    try {
+      const from = req.body.From || req.body.Caller || "";
+      const to = req.body.To || req.body.Called || "";
+      const callStatus = req.body.CallStatus || "";
+      const callerName = req.body.CallerName || "Unknown Caller";
 
-    // Option A — Twilio is the front door. Try the tradie's mobile first; if no answer, voicemail/SMS flow runs in dial-result.
-    if (mode === "twilio_dial" && tradieMobile) {
-      const actionUrl = `${baseUrl}/api/twilio/dial-result?ownerUserId=${encodeURIComponent(userId)}&caller=${encodeURIComponent(from)}&callerName=${encodeURIComponent(callerName)}`;
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+      console.log(`Incoming call from ${from} to ${to} (status: ${callStatus}, name: ${callerName})`);
+
+      const settingsRow: any = await resolveOwnerSettings(to, from);
+      if (!settingsRow) {
+        console.log(`No user found for Twilio number: ${to}`);
+        res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Olivia-Neural">Sorry, this number is not configured.</Say><Hangup/></Response>`);
+        return;
+      }
+      const userId = settingsRow.userId as string;
+      console.log(`Resolved to user ${userId} for Twilio number ${to}`);
+
+      const baseUrl = getPublicBaseUrl(req);
+      const mode = (settingsRow.forwardingMode as string) || "carrier_forward";
+      const tradieMobile = (settingsRow.tradieMobileNumber as string || "").trim();
+
+      // Option A — Twilio is the front door. Try the tradie's mobile first; if no answer, voicemail/SMS flow runs in dial-result.
+      if (mode === "twilio_dial" && tradieMobile) {
+        const actionUrl = `${baseUrl}/api/twilio/dial-result?ownerUserId=${encodeURIComponent(userId)}&caller=${encodeURIComponent(from)}&callerName=${encodeURIComponent(callerName)}`;
+        res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Dial action="${actionUrl}" method="POST" timeout="20" callerId="${to}">
     <Number>${tradieMobile}</Number>
   </Dial>
 </Response>`);
-      return;
-    }
+        return;
+      }
 
-    // Option B (default) — call has already been forwarded by carrier (or direct), so go straight to voicemail flow
-    await handleMissedCallAndRespond(req, res, userId, settingsRow, from, callerName, baseUrl);
+      // Option B (default) — call has already been forwarded by carrier (or direct), so go straight to voicemail flow
+      await handleMissedCallAndRespond(req, res, userId, settingsRow, from, callerName, baseUrl);
+    } catch (err) {
+      console.error("Voice webhook error:", err);
+      if (!res.headersSent) {
+        res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Olivia-Neural">Sorry, we encountered an error. Please try again later.</Say><Hangup/></Response>`);
+      }
+    }
   });
 
   // Called when a Dial attempt to the tradie completes. If they answered, we hang up.
@@ -513,6 +518,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err: any) {
       console.error("Delete voice recording error:", err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Test Twilio credentials — makes a lightweight API call to verify they work
+  app.post("/api/settings/test-twilio", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const [row] = await db.select({
+        twilioAccountSid: settings.twilioAccountSid,
+        twilioAuthToken: settings.twilioAuthToken,
+        twilioPhoneNumber: settings.twilioPhoneNumber,
+      }).from(settings).where(eq(settings.userId, req.userId!));
+
+      const sid = row?.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "";
+      const token = row?.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "";
+
+      if (!sid || !token) {
+        return res.json({ ok: false, error: "No credentials saved yet. Enter your Account SID and Auth Token first." });
+      }
+
+      const twilioClient = (await import("twilio")).default;
+      const client = twilioClient(sid, token);
+      const account = await client.api.v2010.accounts(sid).fetch();
+      return res.json({ ok: true, accountName: account.friendlyName });
+    } catch (err: any) {
+      const msg = err.code === 20003
+        ? "Authentication failed — your Account SID or Auth Token is wrong. Check your Twilio console."
+        : err.message || "Could not connect to Twilio.";
+      return res.json({ ok: false, error: msg });
     }
   });
 
@@ -1128,15 +1161,18 @@ async function handleMissedCallAndRespond(
     console.error("handleMissedCallAndRespond DB error:", err);
   }
 
-  const businessName = settingsRow?.businessName || "us";
-  const voiceMessage = (settingsRow?.missedCallVoiceMessage || "Sorry we missed your call. Please leave a message after the tone and we will get back to you.").trim();
+  const businessName = xmlEscape(settingsRow?.businessName || "us");
+  const rawVoiceMsg = (settingsRow?.missedCallVoiceMessage || "Sorry we missed your call. Please leave a message after the tone and we will get back to you.").trim();
+  const voiceMessage = xmlEscape(rawVoiceMsg);
   const hasRecording = !!(settingsRow?.voiceRecordingData && settingsRow?.voiceRecordingMimeType);
   const recordingUrl = hasRecording && settingsRow?.userId ? `${baseUrl}/api/voice-recording/${settingsRow.userId}` : null;
   const voicemailEnabled = settingsRow?.voicemailEnabled !== false;
 
+  // Polly.Olivia-Neural is Australian English — natural and clear.
+  // Falls back automatically to text-to-speech if no custom recording is stored.
   const greetingTwiml = recordingUrl
     ? `<Play>${recordingUrl}</Play>`
-    : `<Say voice="Polly.Joanna">${voiceMessage} Thanks for calling ${businessName}.</Say>`;
+    : `<Say voice="Polly.Olivia-Neural">${voiceMessage} Thanks for calling ${businessName}.</Say>`;
 
   if (voicemailEnabled && missedCallId) {
     const recCb = `${baseUrl}/api/twilio/recording-callback?missedCallId=${encodeURIComponent(missedCallId)}`;
@@ -1144,7 +1180,7 @@ async function handleMissedCallAndRespond(
 <Response>
   ${greetingTwiml}
   <Record action="${recCb}" method="POST" recordingStatusCallback="${recCb}" recordingStatusCallbackMethod="POST" maxLength="120" timeout="5" playBeep="true" finishOnKey="#" trim="trim-silence"/>
-  <Say voice="Polly.Joanna">No message recorded. Goodbye.</Say>
+  <Say voice="Polly.Olivia-Neural">No message recorded. Goodbye.</Say>
   <Hangup/>
 </Response>`);
   } else {
@@ -1154,6 +1190,11 @@ async function handleMissedCallAndRespond(
   <Hangup/>
 </Response>`);
   }
+}
+
+/** Escape characters that would break TwiML XML */
+function xmlEscape(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function phonesMatchSimple(a: string, b: string): boolean {

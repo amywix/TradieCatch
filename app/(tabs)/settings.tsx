@@ -375,6 +375,27 @@ export default function SettingsScreen() {
   const [twilioToken, setTwilioToken] = useState(settings.twilioAuthToken || '');
   const [twilioPhone, setTwilioPhone] = useState(settings.twilioPhoneNumber || '');
   const [twilioSaving, setTwilioSaving] = useState(false);
+  const [twilioTestStatus, setTwilioTestStatus] = useState<null | 'testing' | 'ok' | 'error'>(null);
+  const [twilioTestMsg, setTwilioTestMsg] = useState('');
+
+  const handleTestTwilio = useCallback(async () => {
+    setTwilioTestStatus('testing');
+    setTwilioTestMsg('');
+    try {
+      const res = await apiRequest('POST', '/api/settings/test-twilio');
+      const data = await res.json();
+      if (data.ok) {
+        setTwilioTestStatus('ok');
+        setTwilioTestMsg(data.accountName ? `Connected — account: ${data.accountName}` : 'Connected successfully');
+      } else {
+        setTwilioTestStatus('error');
+        setTwilioTestMsg(data.error || 'Could not connect to Twilio.');
+      }
+    } catch (err: any) {
+      setTwilioTestStatus('error');
+      setTwilioTestMsg(err.message || 'Connection test failed.');
+    }
+  }, []);
 
   const openTwilioModal = useCallback(() => {
     setTwilioSid(settings.twilioAccountSid || '');
@@ -1039,6 +1060,36 @@ export default function SettingsScreen() {
                 {settings.twilioAccountSid ? 'Edit Twilio Details' : 'Add Twilio Details'}
               </Text>
             </Pressable>
+            {settings.twilioAccountSid ? (
+              <>
+                <View style={styles.settingDivider} />
+                <Pressable
+                  style={[styles.twilioDetailsBtn, twilioTestStatus === 'testing' && { opacity: 0.6 }]}
+                  onPress={handleTestTwilio}
+                  disabled={twilioTestStatus === 'testing'}
+                >
+                  {twilioTestStatus === 'testing' ? (
+                    <ActivityIndicator size="small" color={Colors.accent} />
+                  ) : (
+                    <Ionicons name="wifi-outline" size={18} color={Colors.accent} />
+                  )}
+                  <Text style={styles.twilioDetailsBtnText}>
+                    {twilioTestStatus === 'testing' ? 'Testing…' : 'Test Connection'}
+                  </Text>
+                </Pressable>
+                {twilioTestStatus === 'ok' && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 12 }}>
+                    <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+                    <Text style={{ color: Colors.success, fontSize: 13 }}>{twilioTestMsg}</Text>
+                  </View>
+                )}
+                {twilioTestStatus === 'error' && (
+                  <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                    <Text style={{ color: Colors.danger, fontSize: 13 }}>{twilioTestMsg}</Text>
+                  </View>
+                )}
+              </>
+            ) : null}
           </View>
         </View>
 
