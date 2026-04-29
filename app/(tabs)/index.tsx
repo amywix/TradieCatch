@@ -9,7 +9,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { getApiUrl } from '@/lib/query-client';
 import { useData, MissedCall } from '@/lib/data-context';
-import { formatTimeAgo, formatTime, getInitials, getAvatarColor } from '@/lib/helpers';
+import { formatTimeAgo, formatTime, getInitials, getAvatarColor, confirmAction } from '@/lib/helpers';
 
 const STATE_LABELS: Record<string, string> = {
   none: '',
@@ -202,17 +202,14 @@ export default function CallsScreen() {
   }, []);
 
   const handleDelete = useCallback((id: string) => {
-    Alert.alert('Delete Call', 'Remove this missed call?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          await removeCall(id);
-        },
-      },
-    ]);
+    confirmAction('Delete Call', 'Remove this missed call?', 'Delete', async () => {
+      try {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await removeCall(id);
+      } catch (err: any) {
+        Alert.alert('Error', err?.message || 'Could not delete call.');
+      }
+    });
   }, [removeCall]);
 
   const handleAddCall = useCallback(() => {

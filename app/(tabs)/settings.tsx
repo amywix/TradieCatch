@@ -10,6 +10,7 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useData } from '@/lib/data-context';
+import { confirmAction } from '@/lib/helpers';
 import { useSubscription } from '@/lib/subscription-context';
 import { useAuth } from '@/lib/auth-context';
 import { apiRequest } from '@/lib/query-client';
@@ -17,7 +18,7 @@ import { router } from 'expo-router';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { settings, updateAppSettings, updateServices } = useData();
+  const { settings, updateAppSettings, updateServices, refreshAll } = useData();
   const { isPro, openCustomerPortal } = useSubscription();
   const { user, logout } = useAuth();
   const [businessName, setBusinessName] = useState(settings.businessName);
@@ -169,47 +170,39 @@ export default function SettingsScreen() {
   }, [recordingUri, playbackSound]);
 
   const deleteServerRecording = useCallback(async () => {
-    Alert.alert(
+    confirmAction(
       'Delete Recording',
       'Remove your voicemail recording? Callers will hear the default text message instead.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive',
-          onPress: async () => {
-            try {
-              await apiRequest('DELETE', '/api/settings/voice-recording');
-              setHasServerRecording(false);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (err) {
-              Alert.alert('Error', 'Could not delete recording.');
-            }
-          },
-        },
-      ]
+      'Delete',
+      async () => {
+        try {
+          await apiRequest('DELETE', '/api/settings/voice-recording');
+          await refreshAll();
+          setHasServerRecording(false);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (err: any) {
+          Alert.alert('Error', err?.message || 'Could not delete recording.');
+        }
+      },
     );
-  }, []);
+  }, [refreshAll]);
 
   const reRecordVoicemail = useCallback(async () => {
-    Alert.alert(
+    confirmAction(
       'Re-record',
       'Delete the current recording and record a new one?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Re-record', style: 'destructive',
-          onPress: async () => {
-            try {
-              await apiRequest('DELETE', '/api/settings/voice-recording');
-              setHasServerRecording(false);
-            } catch (err) {
-              Alert.alert('Error', 'Could not delete recording.');
-            }
-          },
-        },
-      ]
+      'Re-record',
+      async () => {
+        try {
+          await apiRequest('DELETE', '/api/settings/voice-recording');
+          await refreshAll();
+          setHasServerRecording(false);
+        } catch (err: any) {
+          Alert.alert('Error', err?.message || 'Could not delete recording.');
+        }
+      },
     );
-  }, []);
+  }, [refreshAll]);
 
   const handleWebFileUpload = useCallback(async (file: File) => {
     setIsWebUploading(true);
