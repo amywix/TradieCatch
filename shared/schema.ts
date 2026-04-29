@@ -13,7 +13,6 @@ export const users = pgTable("users", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   pushToken: text("push_token"),
-  isOperator: boolean("is_operator").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -119,54 +118,6 @@ export const settings = pgTable("settings", {
   voicemailEnabled: boolean("voicemail_enabled").default(true).notNull(),
   conversationMessages: jsonb("conversation_messages").$type<Record<string, string>>().default({}),
 });
-
-// ─── Sales Pipeline ──────────────────────────────────────────────────────────
-
-export const LEAD_STAGES = ["new", "qualified", "demo", "proposal", "closed"] as const;
-export type LeadStage = typeof LEAD_STAGES[number];
-
-export const leads = pgTable("leads", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  phone: text("phone").notNull(),
-  email: text("email").default(""),
-  address: text("address").default(""),
-  jobNotes: text("job_notes").default(""),
-  stage: text("stage").$type<LeadStage>().default("new").notNull(),
-  paid: boolean("paid").default(false).notNull(),
-  calendlyEventTime: text("calendly_event_time"),
-  calendlyEventUri: text("calendly_event_uri"),
-  stripeSessionId: text("stripe_session_id"),
-  outcome: text("outcome").default(""),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const leadMessages = pgTable("lead_messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  leadId: varchar("lead_id").notNull(),
-  direction: text("direction").$type<"outbound" | "inbound">().notNull(),
-  body: text("body").notNull(),
-  twilioSid: text("twilio_sid").default(""),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const salesSettings = pgTable("sales_settings", {
-  id: varchar("id").primaryKey().default("singleton"),
-  demoVideoUrl: text("demo_video_url").default("").notNull(),
-  calendlyUrl: text("calendly_url").default("").notNull(),
-  twilioAccountSid: text("twilio_account_sid").default("").notNull(),
-  twilioAuthToken: text("twilio_auth_token").default("").notNull(),
-  twilioPhoneNumber: text("twilio_phone_number").default("").notNull(),
-  setupFeeAmount: integer("setup_fee_amount").default(299).notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export type Lead = typeof leads.$inferSelect;
-export type LeadMessage = typeof leadMessages.$inferSelect;
-export type SalesSettings = typeof salesSettings.$inferSelect;
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,

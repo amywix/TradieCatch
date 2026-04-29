@@ -37,15 +37,8 @@ Tradies can customize their list of services, stored as a JSONB array within the
 #### Subscription System (Stripe)
 The application integrates with Stripe for subscription management. It features a paywall, checkout flow, and customer portal. Stripe webhook handlers manage subscription status and sync data to the database, gating premium features for subscribers.
 
-#### Sales Operator Portal (Web)
-A standalone web portal at `/sales-login` and `/sales` for the TradieCatch operator to manage the sales pipeline. Built as server-side HTML with Alpine.js (no Expo dependency). Features a 5-column Kanban board (New → Qualified → Demo → Proposal → Closed), lead detail panel with SMS thread, automated SMS outreach, Stripe payment link generation, Calendly booking integration, and a settings page. The portal uses JWT authentication with an operator-specific account (`isOperator=true` flag). Served directly by Express before the static Expo catch-all. Operator credentials: `operator@tradiecatch.com` / `operator123456`.
-
-**Key files:**
-- `server/templates/sales-login.html` — operator login page
-- `server/templates/sales-portal.html` — full SPA portal with Alpine.js
-- `server/sales-flow.ts` — SMS outreach logic and auto-reply state machine
-- `shared/schema.ts` — `leads`, `leadMessages`, `salesSettings` tables
-- Routes registered in `server/index.ts` before `configureExpoAndLanding`
+#### Web Access (no app store required)
+The Expo app is also served as a web app via the Express server, so tradies can sign up and use the full product (calls, jobs, settings, voice greeting, SMS flow) directly from a browser at the published URL. This removes the App Store / Play Store dependency for early SaaS sign-ups.
 
 ## External Dependencies
 
