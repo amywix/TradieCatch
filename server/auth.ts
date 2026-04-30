@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { db } from "./db";
-import { users, settings, smsTemplates, DEFAULT_SERVICES } from "@shared/schema";
+import { users, settings, smsTemplates, DEFAULT_SERVICES, TERMS_VERSION } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 const JWT_SECRET = process.env.JWT_SECRET || "tradiecatch-jwt-secret-change-in-production";
@@ -69,7 +69,14 @@ export async function register(req: Request, res: Response) {
 
     res.json({
       token,
-      user: { id: user.id, email: user.email, username: user.username },
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        mustChangePassword: user.mustChangePassword,
+        acceptedTermsAt: user.acceptedTermsAt ? user.acceptedTermsAt.toISOString() : null,
+        isOperator: user.isOperator,
+      },
     });
   } catch (err: any) {
     console.error("Registration error:", err);
@@ -100,7 +107,14 @@ export async function login(req: Request, res: Response) {
 
     res.json({
       token,
-      user: { id: user.id, email: user.email, username: user.username },
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        mustChangePassword: user.mustChangePassword,
+        acceptedTermsAt: user.acceptedTermsAt ? user.acceptedTermsAt.toISOString() : null,
+        isOperator: user.isOperator,
+      },
     });
   } catch (err) {
     console.error("Login error:", err);
@@ -114,9 +128,74 @@ export async function getMe(req: AuthRequest, res: Response) {
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
-    res.json({ id: user.id, email: user.email, username: user.username });
+    res.json({
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      mustChangePassword: user.mustChangePassword,
+      acceptedTermsAt: user.acceptedTermsAt ? user.acceptedTermsAt.toISOString() : null,
+      isOperator: user.isOperator,
+    });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch user" });
+  }
+}
+
+export async function requireOperator(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const [user] = await db.select().from(users).where(eq(users.id, req.userId!));
+    if (!user?.isOperator) {
+      return res.status(403).json({ error: "Operator access required" });
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ error: "Operator check failed" });
+  }
+}
+
+export async function changePassword(req: AuthRequest, res: Response) {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: "Current and new password are required" });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: "New password must be at least 6 characters" });
+  }
+  try {
+    const [user] = await db.select().from(users).where(eq(users.id, req.userId!));
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const ok = await bcrypt.compare(currentPassword, user.password);
+    if (!ok) return res.status(400).json({ error: "Current password is incorrect" });
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ error: "New password must be different from your current password" });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await db.update(users)
+      .set({ password: newHash, mustChangePassword: false })
+      .where(eq(users.id, user.id));
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Change password error:", err);
+    res.status(500).json({ error: "Could not change password. Please try again." });
+  }
+}
+
+export async function acceptTerms(req: AuthRequest, res: Response) {
+  try {
+    await db.update(users)
+      .set({
+        acceptedTermsAt: new Date(),
+        acceptedTermsVersion: TERMS_VERSION,
+      })
+      .where(eq(users.id, req.userId!));
+    res.json({ ok: true, acceptedAt: new Date().toISOString(), version: TERMS_VERSION });
+  } catch (err) {
+    console.error("Accept terms error:", err);
+    res.status(500).json({ error: "Could not record terms acceptance. Please try again." });
   }
 }
 
