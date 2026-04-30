@@ -18,7 +18,6 @@ interface SubscriptionContextValue {
   isLoading: boolean;
   subscription: SubscriptionInfo | null;
   checkSubscription: () => Promise<boolean>;
-  openCheckout: () => Promise<void>;
   openCustomerPortal: () => Promise<void>;
 }
 
@@ -110,19 +109,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     return () => sub.remove();
   }, [isAuthenticated, checkSubscription]);
 
-  const openCheckout = useCallback(async () => {
-    const res = await apiRequest('POST', '/api/stripe/create-checkout');
-    const data = await res.json();
-    if (!res.ok || !data.url) {
-      throw new Error(data.error || 'Could not create checkout session. Please try again.');
-    }
-    if (Platform.OS === 'web') {
-      window.location.href = data.url;
-    } else {
-      await Linking.openURL(data.url);
-    }
-  }, []);
-
   const openCustomerPortal = useCallback(async () => {
     try {
       const res = await apiRequest('POST', '/api/stripe/customer-portal');
@@ -146,7 +132,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       isLoading: isLoading || !cacheLoaded,
       subscription,
       checkSubscription,
-      openCheckout,
       openCustomerPortal,
     }}>
       {children}

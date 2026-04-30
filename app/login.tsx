@@ -93,11 +93,6 @@ export default function LoginScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInUp.delay(500).duration(500)} style={styles.landingActions}>
-          <View style={styles.trialBadge}>
-            <Ionicons name="pricetag-outline" size={14} color={Colors.accent} />
-            <Text style={styles.trialBadgeText}>$299 setup, then $99/month from day 31</Text>
-          </View>
-
           <Pressable
             style={styles.trialBtn}
             onPress={() => {
@@ -148,7 +143,7 @@ export default function LoginScreen() {
             </Text>
             <Text style={styles.formSubtitle}>
               {screen === 'register'
-                ? 'Sign up and subscribe to get started'
+                ? 'Sign up to get started'
                 : 'Sign in to your TradieCatch account'}
             </Text>
           </View>

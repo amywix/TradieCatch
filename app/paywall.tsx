@@ -12,37 +12,23 @@ import { useSubscription } from '@/lib/subscription-context';
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
-  const { openCheckout, checkSubscription } = useSubscription();
-  const [purchasing, setPurchasing] = useState(false);
+  const { checkSubscription } = useSubscription();
   const [errorMsg, setErrorMsg] = useState('');
   const [checkingSubscription, setCheckingSubscription] = useState(false);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
 
-  const handleSubscribe = useCallback(async () => {
-    setPurchasing(true);
-    setErrorMsg('');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      await openCheckout();
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Could not open checkout. Please try again.');
-    } finally {
-      setPurchasing(false);
-    }
-  }, [openCheckout]);
-
   const handleAlreadySubscribed = useCallback(async () => {
     setCheckingSubscription(true);
     setErrorMsg('');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const active = await checkSubscription();
     setCheckingSubscription(false);
     if (active) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/onboarding');
     } else {
-      setErrorMsg('No active subscription found. Please subscribe first.');
+      setErrorMsg("We couldn't find an active subscription for your account yet. If you've just paid, wait a moment and try again — or contact us at hello@tradiecatch.com.");
     }
   }, [checkSubscription]);
 
@@ -56,9 +42,9 @@ export default function PaywallScreen() {
         </View>
 
         <Animated.View entering={FadeInDown.delay(200).duration(500)}>
-          <Text style={styles.title}>TradieCatch Pro</Text>
+          <Text style={styles.title}>Subscription Required</Text>
           <Text style={styles.subtitle}>
-            Everything you need to never miss a job again
+            Your TradieCatch account isn't active yet
           </Text>
         </Animated.View>
 
@@ -70,12 +56,11 @@ export default function PaywallScreen() {
           <PaywallFeature icon="shield-checkmark" text="Priority customer support" />
         </Animated.View>
 
-        <Animated.View entering={FadeInUp.delay(500).duration(500)} style={styles.priceCard}>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceAmount}>$99</Text>
-            <Text style={styles.pricePeriod}>/month</Text>
-          </View>
-          <Text style={styles.priceDesc}>$299 one-time setup today.{"\n"}First $99/month charged 30 days from now. Cancel anytime.</Text>
+        <Animated.View entering={FadeInUp.delay(500).duration(500)} style={styles.infoCard}>
+          <Ionicons name="mail-outline" size={20} color={Colors.accent} />
+          <Text style={styles.infoText}>
+            We'll send you a secure Stripe payment link to start your subscription. Once you've paid, tap the button below to activate your account.
+          </Text>
         </Animated.View>
       </Animated.View>
 
@@ -88,26 +73,20 @@ export default function PaywallScreen() {
         ) : null}
 
         <Pressable
-          style={[styles.subscribeBtn, purchasing && styles.subscribeBtnDisabled]}
-          onPress={handleSubscribe}
-          disabled={purchasing}
+          style={[styles.subscribeBtn, checkingSubscription && styles.subscribeBtnDisabled]}
+          onPress={handleAlreadySubscribed}
+          disabled={checkingSubscription}
         >
-          {purchasing ? (
+          {checkingSubscription ? (
             <ActivityIndicator size="small" color={Colors.white} />
           ) : (
-            <Text style={styles.subscribeBtnText}>Pay $299 Setup &amp; Start</Text>
+            <Text style={styles.subscribeBtnText}>I've Paid &mdash; Activate Account</Text>
           )}
         </Pressable>
 
-        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-          <Pressable onPress={handleAlreadySubscribed} disabled={checkingSubscription}>
-            {checkingSubscription ? (
-              <ActivityIndicator size="small" color={Colors.textSecondary} />
-            ) : (
-              <Text style={styles.linkText}>Already subscribed?</Text>
-            )}
-          </Pressable>
-        </View>
+        <Text style={styles.helperText}>
+          Need help? Email hello@tradiecatch.com
+        </Text>
       </View>
     </View>
   );
@@ -195,6 +174,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 16,
     elevation: 4,
+  },
+  infoCard: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 18,
+    marginTop: 28,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'flex-start',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  helperText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
   },
   priceBadge: {
     backgroundColor: Colors.accent,

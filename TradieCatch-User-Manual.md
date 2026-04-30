@@ -436,10 +436,11 @@ The app comes with a default template pre-installed:
 
 TradieCatch uses Stripe for secure payment processing.
 
-### Current Pricing
+### How Billing Works
 
-- **Setup fee:** $299 (one-time)
-- **Monthly:** $99/month
+Once you sign up for an account, we'll send you a secure Stripe payment link to start your subscription. Once you've paid, open the app and tap **"I've Paid — Activate Account"** on the subscription screen — your account will unlock immediately.
+
+If your subscription becomes inactive (cancelled or payment fails), the app will return to the subscription screen until billing is restored.
 
 ### Managing Your Subscription
 

@@ -657,120 +657,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(template);
   });
 
-  app.post("/api/stripe/create-checkout", requireAuth, async (req: AuthRequest, res: Response) => {
-    try {
-      const stripe = await getUncachableStripeClient();
-      const userId = req.userId!;
-
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      if (!user) return res.status(404).json({ error: "User not found" });
-
-      let customerId = user.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          email: user.email,
-          metadata: { userId },
-        });
-        await db.update(users).set({ stripeCustomerId: customer.id }).where(eq(users.id, userId));
-        customerId = customer.id;
-      }
-
-      // Query Stripe API directly for the active recurring price
-      const stripeProducts = await stripe.products.search({ query: "name:'TradieCatch Pro' AND active:'true'" });
-      if (!stripeProducts.data.length) {
-        return res.status(400).json({ error: "No subscription product configured yet. Please contact support." });
-      }
-      const product = stripeProducts.data[0];
-      const stripePrices = await stripe.prices.list({ product: product.id, active: true, limit: 10 });
-      const recurringPrice = stripePrices.data.find(p => p.recurring !== null);
-      if (!recurringPrice) {
-        return res.status(400).json({ error: "No subscription price configured yet. Please contact support." });
-      }
-      const priceId = recurringPrice.id;
-
-      const domains = process.env.REPLIT_DOMAINS || "";
-      const primaryDomain = domains.split(",")[0]?.trim() || "";
-      const baseUrl = primaryDomain ? `https://${primaryDomain}` : `${req.protocol}://${req.get("host")}`;
-
-      const session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        payment_method_types: ['card'],
-        line_items: [
-          { price: priceId, quantity: 1 },
-          {
-            quantity: 1,
-            price_data: {
-              currency: 'aud',
-              product_data: {
-                name: 'TradieCatch Setup Fee',
-                description: 'One-time setup & onboarding (charged today). $99/month subscription begins after 30 days.',
-              },
-              unit_amount: 29900,
-            },
-          },
-        ],
-        mode: 'subscription',
-        subscription_data: {
-          trial_period_days: 30,
-          description: 'TradieCatch Pro — $99/month begins after 30-day setup period',
-        },
-        success_url: `${baseUrl}/api/stripe/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/api/stripe/checkout-cancel`,
-      });
-
-      res.json({ url: session.url });
-    } catch (err: any) {
-      console.error("Stripe checkout error:", err);
-      res.status(500).json({ error: "Failed to create checkout session" });
-    }
-  });
-
-  app.get("/api/stripe/checkout-success", async (req: Request, res: Response) => {
-    const sessionId = req.query.session_id as string;
-    if (!sessionId) return res.redirect("/?checkout=error");
-
-    try {
-      const stripe = await getUncachableStripeClient();
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-      if (session.customer && session.subscription) {
-        const customerId = typeof session.customer === 'string' ? session.customer : session.customer.id;
-        const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription.id;
-
-        await db.update(users)
-          .set({ stripeSubscriptionId: subscriptionId })
-          .where(eq(users.stripeCustomerId, customerId));
-      }
-    } catch (err) {
-      console.error("Error processing checkout success:", err);
-    }
-
-    const domains = process.env.REPLIT_DOMAINS || "";
-    const devDomain = process.env.REPLIT_DEV_DOMAIN || "";
-    const primaryDomain = domains.split(",")[0]?.trim() || "";
-
-    const redirectUrl = primaryDomain
-      ? `https://${primaryDomain}/?checkout=success`
-      : devDomain
-      ? `https://${devDomain}:8081/?checkout=success`
-      : "/?checkout=success";
-
-    res.redirect(redirectUrl);
-  });
-
-  app.get("/api/stripe/checkout-cancel", async (req: Request, res: Response) => {
-    const domains = process.env.REPLIT_DOMAINS || "";
-    const devDomain = process.env.REPLIT_DEV_DOMAIN || "";
-    const primaryDomain = domains.split(",")[0]?.trim() || "";
-
-    const redirectUrl = primaryDomain
-      ? `https://${primaryDomain}/?checkout=cancelled`
-      : devDomain
-      ? `https://${devDomain}:8081/?checkout=cancelled`
-      : "/?checkout=cancelled";
-
-    res.redirect(redirectUrl);
-  });
+  // Note: in-app Stripe checkout has been removed. Subscriptions are now created
+  // manually outside the app (e.g. via a Stripe payment link sent to the tradie's
+  // email). The /api/stripe/subscription-status endpoint auto-links by email.
 
   app.get("/api/stripe/subscription-status", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
@@ -789,14 +678,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      if (!user?.stripeCustomerId) {
+      const stripe = await getUncachableStripeClient();
+      let stripeCustomerId = user?.stripeCustomerId || null;
+
+      // If we don't have a Stripe customer linked yet, try to find one by email.
+      // This lets you create a customer + subscription in Stripe (e.g. via a payment link)
+      // and have the app auto-link as soon as the tradie checks status.
+      if (!stripeCustomerId && user?.email) {
+        try {
+          const matches = await stripe.customers.list({ email: user.email, limit: 5 });
+          if (matches.data.length > 0) {
+            stripeCustomerId = matches.data[0].id;
+            await db.update(users)
+              .set({ stripeCustomerId })
+              .where(eq(users.id, userId));
+          }
+        } catch (lookupErr) {
+          console.error("Stripe customer lookup by email failed:", lookupErr);
+        }
+      }
+
+      if (!stripeCustomerId) {
         return res.json({ active: false, subscription: null });
       }
 
       // Query Stripe API directly for up-to-date subscription status
-      const stripe = await getUncachableStripeClient();
       const subscriptions = await stripe.subscriptions.list({
-        customer: user.stripeCustomerId,
+        customer: stripeCustomerId,
         status: 'all',
         limit: 5,
       });
