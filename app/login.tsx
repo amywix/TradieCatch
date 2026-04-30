@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 
@@ -23,6 +24,7 @@ export default function LoginScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const topInset = Platform.OS === 'web' ? 67 : insets.top;
   const bottomInset = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -42,6 +44,10 @@ export default function LoginScreen() {
     }
     if (password.length < 6) {
       Alert.alert('Weak Password', 'Password must be at least 6 characters.');
+      return;
+    }
+    if (!agreedToTerms) {
+      Alert.alert('Please Agree', 'You need to agree to the Terms of Service and Privacy Policy before creating your account.');
       return;
     }
     setIsSubmitting(true);
@@ -219,6 +225,38 @@ export default function LoginScreen() {
                 />
               </View>
             </View>
+          )}
+
+          {screen === 'register' && (
+            <Pressable
+              style={styles.termsRow}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setAgreedToTerms((v) => !v);
+              }}
+              testID="terms-checkbox"
+            >
+              <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
+                {agreedToTerms && <Ionicons name="checkmark" size={16} color={Colors.white} />}
+              </View>
+              <Text style={styles.termsText}>
+                I agree to the{' '}
+                <Text
+                  style={styles.termsLink}
+                  onPress={(e) => { (e as any).stopPropagation?.(); router.push('/terms-of-service'); }}
+                >
+                  Terms of Service
+                </Text>
+                {' '}and{' '}
+                <Text
+                  style={styles.termsLink}
+                  onPress={(e) => { (e as any).stopPropagation?.(); router.push('/privacy-policy'); }}
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
+            </Pressable>
           )}
 
           <Pressable
@@ -468,5 +506,40 @@ const styles = StyleSheet.create({
   switchTextBold: {
     fontFamily: 'Inter_700Bold',
     color: Colors.accent,
+  },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 12,
+    paddingVertical: 4,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    lineHeight: 19,
+  },
+  termsLink: {
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.accent,
+    textDecorationLine: 'underline',
   },
 });

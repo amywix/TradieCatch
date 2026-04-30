@@ -120,6 +120,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+
+    // Record acceptance of Terms of Service & Privacy Policy. The signup form
+    // requires the user to tick the agreement checkbox before they get here,
+    // so this just persists the acceptance to the database. Best-effort: if it
+    // fails (e.g. transient network), we don't block the user from continuing —
+    // they can re-accept later if we ever surface a re-acceptance prompt.
+    try {
+      await fetch(`${baseUrl}api/auth/accept-terms`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${data.token}`,
+        },
+      });
+    } catch (err) {
+      console.log('Terms acceptance recording failed (non-fatal):', err);
+    }
   }, []);
 
   const logout = useCallback(async () => {

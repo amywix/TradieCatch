@@ -1893,6 +1893,11 @@ export default function SettingsScreen() {
               Never lose a customer from a missed call. Auto-reply with SMS and book jobs on the spot.
             </Text>
             <View style={styles.aboutDivider} />
+            <Pressable style={styles.privacyRow} onPress={() => router.push('/terms-of-service')}>
+              <Ionicons name="document-text-outline" size={16} color={Colors.primaryLight} />
+              <Text style={styles.privacyLink}>Terms of Service</Text>
+              <Ionicons name="chevron-forward" size={14} color={Colors.textTertiary} />
+            </Pressable>
             <Pressable style={styles.privacyRow} onPress={() => router.push('/privacy-policy')}>
               <Ionicons name="shield-checkmark-outline" size={16} color={Colors.primaryLight} />
               <Text style={styles.privacyLink}>Privacy Policy</Text>

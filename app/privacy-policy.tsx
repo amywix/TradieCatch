@@ -127,6 +127,12 @@ export default function PrivacyPolicyScreen() {
           contact us at:{'\n\n'}
           <Text style={styles.contactEmail}>support@tradiecatch.com</Text>
         </Section>
+
+        <Pressable style={styles.crossLink} onPress={() => router.push('/terms-of-service')}>
+          <Ionicons name="document-text-outline" size={16} color={Colors.accent} />
+          <Text style={styles.crossLinkText}>View Terms of Service</Text>
+          <Ionicons name="chevron-forward" size={14} color={Colors.textTertiary} />
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -219,5 +225,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
     color: Colors.accent,
+  },
+  crossLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  crossLinkText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
   },
 });
