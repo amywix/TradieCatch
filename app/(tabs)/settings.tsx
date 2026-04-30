@@ -292,6 +292,56 @@ export default function SettingsScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [updateAppSettings, voiceMessage]);
 
+  // ── Service Area ───────────────────────────────────────────────────────────
+  const [editingArea, setEditingArea] = useState(false);
+  const [areaAddress, setAreaAddress] = useState((settings as any).baseAddress || '');
+  const [areaRadius, setAreaRadius] = useState(String((settings as any).serviceRadiusKm ?? 30));
+  const [areaSaving, setAreaSaving] = useState(false);
+  const [areaError, setAreaError] = useState<string | null>(null);
+  useEffect(() => {
+    setAreaAddress((settings as any).baseAddress || '');
+    setAreaRadius(String((settings as any).serviceRadiusKm ?? 30));
+  }, [(settings as any).baseAddress, (settings as any).serviceRadiusKm]);
+
+  const handleSaveServiceArea = useCallback(async () => {
+    const addr = areaAddress.trim();
+    const r = parseInt(areaRadius, 10);
+    if (!addr || addr.length < 5) {
+      setAreaError('Enter a full address with suburb and postcode.');
+      return;
+    }
+    if (isNaN(r) || r <= 0 || r > 500) {
+      setAreaError('Radius must be a number between 1 and 500 km.');
+      return;
+    }
+    setAreaError(null);
+    setAreaSaving(true);
+    try {
+      let coords: { lat: number; lng: number } | null = null;
+      try {
+        const lookup: any = await apiRequest('POST', '/api/settings/geocode', { address: addr });
+        if (lookup && typeof lookup.lat === 'number' && typeof lookup.lng === 'number') {
+          coords = { lat: lookup.lat, lng: lookup.lng };
+        }
+      } catch (geoErr: any) {
+        // Geocoding failed — surface a clear error; still save the text fields
+        // so the tradie can correct it later.
+        setAreaError(geoErr?.message || "Couldn't find that address. Try adding the suburb and postcode.");
+      }
+      await updateAppSettings({
+        baseAddress: addr,
+        ...(coords ? { baseLat: coords.lat, baseLng: coords.lng } : { baseLat: null, baseLng: null }),
+        serviceRadiusKm: r,
+      } as any);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (coords) {
+        setEditingArea(false);
+      }
+    } finally {
+      setAreaSaving(false);
+    }
+  }, [areaAddress, areaRadius, updateAppSettings]);
+
   // ── Message Bank ──────────────────────────────────────────────────────────
   const DEFAULT_MSGS: Record<string, string> = {
     greeting_missed_call: "Hi! Sorry we missed your call!{businessLine}\n\nCan we grab your name to get started?",
@@ -631,6 +681,88 @@ export default function SettingsScreen() {
                 </Pressable>
               )}
             </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Service Area</Text>
+          <View style={styles.card}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIcon, { backgroundColor: '#E8EEF8' }]}>
+                  <Ionicons name="location-outline" size={18} color={Colors.primaryLight} />
+                </View>
+                <View style={styles.settingContent}>
+                  <Text style={styles.settingLabel}>Base address & travel radius</Text>
+                  <Text style={styles.settingDescription}>
+                    Jobs outside this area won't auto-book. We'll notify you to review them manually.
+                  </Text>
+                </View>
+              </View>
+              {!editingArea && (
+                <Pressable onPress={() => setEditingArea(true)} hitSlop={8}>
+                  <Feather name="edit-2" size={16} color={Colors.textTertiary} />
+                </Pressable>
+              )}
+            </View>
+
+            {!editingArea ? (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
+                <Text style={styles.settingValue}>
+                  {(settings as any).baseAddress?.trim() || 'Tap edit to set your base address'}
+                </Text>
+                <Text style={[styles.settingDescription, { marginTop: 4 }]}>
+                  Travel radius: {(settings as any).serviceRadiusKm ?? 30} km
+                  {((settings as any).baseAddress?.trim() && ((settings as any).baseLat == null || (settings as any).baseLng == null))
+                    ? '  •  ⚠️ address not located — service-area check disabled'
+                    : ''}
+                </Text>
+              </View>
+            ) : (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
+                <Text style={[styles.settingDescription, { marginBottom: 6 }]}>Base address</Text>
+                <TextInput
+                  style={[styles.editInput, { paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: Colors.border, borderRadius: 8 }]}
+                  value={areaAddress}
+                  onChangeText={setAreaAddress}
+                  placeholder="e.g. 12 Smith St, Parramatta NSW 2150"
+                  placeholderTextColor={Colors.textTertiary}
+                  autoCapitalize="words"
+                />
+                <Text style={[styles.settingDescription, { marginTop: 12, marginBottom: 6 }]}>Travel radius (km)</Text>
+                <TextInput
+                  style={[styles.editInput, { paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: Colors.border, borderRadius: 8 }]}
+                  value={areaRadius}
+                  onChangeText={(v) => setAreaRadius(v.replace(/[^0-9]/g, ''))}
+                  placeholder="30"
+                  placeholderTextColor={Colors.textTertiary}
+                  keyboardType="number-pad"
+                  maxLength={3}
+                />
+                {areaError && (
+                  <Text style={{ color: Colors.danger || '#D32F2F', marginTop: 8, fontSize: 13 }}>{areaError}</Text>
+                )}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+                  <Pressable
+                    onPress={() => { setEditingArea(false); setAreaError(null); setAreaAddress((settings as any).baseAddress || ''); setAreaRadius(String((settings as any).serviceRadiusKm ?? 30)); }}
+                    style={[styles.upgradeBtn, { flex: 1, backgroundColor: Colors.surface }]}
+                  >
+                    <Text style={[styles.upgradeBtnText, { color: Colors.text }]}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleSaveServiceArea}
+                    disabled={areaSaving}
+                    style={[styles.upgradeBtn, { flex: 1, opacity: areaSaving ? 0.6 : 1 }]}
+                  >
+                    {areaSaving ? (
+                      <ActivityIndicator size="small" color={Colors.white} />
+                    ) : (
+                      <Text style={styles.upgradeBtnText}>Save</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            )}
           </View>
         </View>
 

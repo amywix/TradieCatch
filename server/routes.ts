@@ -604,17 +604,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ));
     }
 
+    const updates: Record<string, any> = { ...req.body };
+
+    // If baseAddress is being set/changed and the caller didn't supply coords,
+    // geocode it server-side and persist the lat/lng. If geocoding fails,
+    // null the lat/lng so the service-area check stays disabled until a valid
+    // address is provided.
+    if (typeof updates.baseAddress === "string") {
+      const trimmed = updates.baseAddress.trim();
+      updates.baseAddress = trimmed;
+      const coordsProvided = updates.baseLat != null && updates.baseLng != null;
+      if (!coordsProvided) {
+        if (!trimmed) {
+          updates.baseLat = null;
+          updates.baseLng = null;
+        } else {
+          try {
+            const { geocodeAddress } = await import("./geo");
+            const geo = await geocodeAddress(trimmed);
+            if (geo) {
+              updates.baseLat = geo.lat;
+              updates.baseLng = geo.lng;
+            } else {
+              updates.baseLat = null;
+              updates.baseLng = null;
+            }
+          } catch (err) {
+            console.error("Settings PATCH geocode failed:", err);
+            updates.baseLat = null;
+            updates.baseLng = null;
+          }
+        }
+      }
+    }
+
     const existing = await db.select().from(settings).where(eq(settings.userId, req.userId!));
     if (existing.length === 0) {
       const [row] = await db.insert(settings).values({
         userId: req.userId!,
-        businessName: req.body.businessName || "",
-        autoReplyEnabled: req.body.autoReplyEnabled !== undefined ? req.body.autoReplyEnabled : true,
+        businessName: updates.businessName || "",
+        autoReplyEnabled: updates.autoReplyEnabled !== undefined ? updates.autoReplyEnabled : true,
+        ...(updates.baseAddress !== undefined ? { baseAddress: updates.baseAddress } : {}),
+        ...(updates.baseLat !== undefined ? { baseLat: updates.baseLat } : {}),
+        ...(updates.baseLng !== undefined ? { baseLng: updates.baseLng } : {}),
+        ...(updates.serviceRadiusKm !== undefined ? { serviceRadiusKm: updates.serviceRadiusKm } : {}),
       }).returning();
       return res.json(row);
     }
-    const [row] = await db.update(settings).set(req.body).where(eq(settings.userId, req.userId!)).returning();
+    const [row] = await db.update(settings).set(updates).where(eq(settings.userId, req.userId!)).returning();
     res.json(row);
+  });
+
+  app.post("/api/settings/geocode", requireAuth, async (req: AuthRequest, res: Response) => {
+    const address = (req.body?.address || "").toString().trim();
+    if (!address) {
+      return res.status(400).json({ error: "address required" });
+    }
+    try {
+      const { geocodeAddress } = await import("./geo");
+      const r = await geocodeAddress(address);
+      if (!r) return res.status(404).json({ error: "Could not find that address. Try adding the suburb and postcode." });
+      res.json(r);
+    } catch (err: any) {
+      console.error("Geocode endpoint error:", err);
+      res.status(500).json({ error: err?.message || "Lookup failed" });
+    }
   });
 
   app.get("/api/templates", requireAuth, async (req: AuthRequest, res: Response) => {

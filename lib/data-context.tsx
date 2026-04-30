@@ -58,6 +58,10 @@ export interface AppSettings {
   calendlyLink?: string;
   googleCalendarLink?: string;
   conversationMessages?: Record<string, string>;
+  baseAddress?: string;
+  baseLat?: number | null;
+  baseLng?: number | null;
+  serviceRadiusKm?: number;
 }
 
 interface DataContextValue {
@@ -111,6 +115,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   bookingProvider: 'manual',
   calendlyLink: '',
   googleCalendarLink: '',
+  baseAddress: '',
+  baseLat: null,
+  baseLng: null,
+  serviceRadiusKm: 30,
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {

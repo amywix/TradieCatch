@@ -344,6 +344,42 @@ export async function handleIncomingReply(fromPhone: string, body: string, toPho
 
     case "awaiting_address": {
       updates.jobAddress = reply;
+
+      // Service-area check: if the tradie has set a base location + radius,
+      // geocode the customer's address and decide whether to keep auto-booking.
+      try {
+        const { checkServiceArea } = await import("./geo");
+        const area = await checkServiceArea(callUserId, reply);
+        if (area.configured && area.geocoded && !area.within) {
+          const { businessName } = await getTwilioConfig(callUserId);
+          const distanceLabel = area.distanceKm != null ? ` (about ${Math.round(area.distanceKm)}km away)` : "";
+          response =
+            `Thanks for the address${distanceLabel}. That's outside our usual service area, ` +
+            `so we can't auto-book this one. We've passed your details to the electrician — ` +
+            `they'll review and get back to you directly.\n\n- ${businessName || "The team"}`;
+          newState = "completed";
+          updates.jobBooked = false;
+          updates.selectedTime = "Out of service area — manual review";
+
+          try {
+            const callerLabel = call.callerName || updates.callerName || "New enquiry";
+            const service = call.selectedService || updates.selectedService || "Job";
+            sendPushToUser(
+              callUserId,
+              "⚠️ Out-of-area enquiry",
+              `${callerLabel} — ${service} at ${reply} (${area.distanceKm != null ? Math.round(area.distanceKm) + "km" : "unknown distance"}, radius ${area.radiusKm}km). Needs manual review.`,
+              { type: "out_of_area", missedCallId: call.id }
+            );
+          } catch (notifErr) {
+            console.error("Out-of-area push notify failed:", notifErr);
+          }
+
+          break;
+        }
+      } catch (err) {
+        console.error("Service-area check failed (continuing booking flow):", err);
+      }
+
       response = fillTemplate(msgs.email_request, {});
       newState = "awaiting_email";
       break;

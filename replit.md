@@ -34,6 +34,12 @@ A state machine manages automated SMS conversations, guiding callers through ser
 #### Services Management
 Tradies can customize their list of services, stored as a JSONB array within their settings. This allows for dynamic service offerings and tailored conversation flows.
 
+#### Service Area (Base Location + Travel Radius)
+Each tradie configures a base address and a travel radius (km) — captured during onboarding (new "Service Area" step) and editable in Settings. The backend geocodes the address via OpenStreetMap Nominatim (free, no API key) and stores `baseLat`/`baseLng` alongside `serviceRadiusKm` on the settings table. When a customer's address comes in via the SMS conversation flow (`awaiting_address`), the server geocodes it, computes the haversine distance to the tradie's base, and:
+- If **within** radius (or no base configured / address can't be geocoded): conversation continues normally to email + booking.
+- If **outside** radius: replies with an out-of-area message (including the actual distance), sets the conversation to `completed`, marks `selectedTime = "Out of service area — manual review"`, does NOT create a job, and pushes a notification ("⚠️ Out-of-area enquiry") to the tradie so they can review manually.
+The geocoding endpoint is `POST /api/settings/geocode` (used by both onboarding and settings to validate addresses before saving).
+
 #### Subscription System (Stripe)
 The application integrates with Stripe for subscription management. Sales/payments are handled manually outside the app via Stripe payment links — the in-app paywall no longer displays prices or runs an in-app checkout. When a tradie signs up, the app gates access via the paywall screen until their Stripe subscription is active. The `/api/stripe/subscription-status` endpoint checks Stripe directly and, if the user has no `stripeCustomerId` linked yet, looks up Stripe customers by email and auto-links any active subscription to that account. This means: create a Stripe customer + subscription for the tradie's email (via a Stripe payment link or directly in Stripe), and as soon as they tap "I've Paid — Activate Account" on the paywall, the app finds the active subscription and unlocks. If the subscription becomes inactive (cancelled/past_due), the app re-checks on every foreground and redirects them back to the paywall. Customer portal is still available from Settings for subscribers.
 

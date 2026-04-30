@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, doublePrecision } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -122,6 +122,10 @@ export const settings = pgTable("settings", {
   forwardingMode: text("forwarding_mode").default("carrier_forward").notNull(),
   voicemailEnabled: boolean("voicemail_enabled").default(true).notNull(),
   conversationMessages: jsonb("conversation_messages").$type<Record<string, string>>().default({}),
+  baseAddress: text("base_address").default("").notNull(),
+  baseLat: doublePrecision("base_lat"),
+  baseLng: doublePrecision("base_lng"),
+  serviceRadiusKm: integer("service_radius_km").default(30).notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({

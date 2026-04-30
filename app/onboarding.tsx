@@ -10,8 +10,9 @@ import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import Colors from '@/constants/colors';
 import { useData } from '@/lib/data-context';
+import { apiRequest } from '@/lib/query-client';
 
-const STEPS = ['Get Twilio', 'Connect', 'Business'];
+const STEPS = ['Get Twilio', 'Connect', 'Business', 'Service Area'];
 
 function ProgressBar({ current }: { current: number }) {
   return (
@@ -335,6 +336,84 @@ function BusinessStep({ businessName, setBusinessName, onNext, onBack, saving }:
   );
 }
 
+function ServiceAreaStep({
+  baseAddress, setBaseAddress,
+  serviceRadius, setServiceRadius,
+  onNext, onBack, saving,
+}: {
+  baseAddress: string;
+  setBaseAddress: (v: string) => void;
+  serviceRadius: string;
+  setServiceRadius: (v: string) => void;
+  onNext: () => void;
+  onBack: () => void;
+  saving: boolean;
+}) {
+  const radiusNum = parseInt(serviceRadius, 10);
+  const radiusValid = !isNaN(radiusNum) && radiusNum > 0 && radiusNum <= 500;
+  const canSubmit = baseAddress.trim().length >= 5 && radiusValid && !saving;
+
+  return (
+    <Animated.View entering={FadeIn.duration(400)} style={styles.stepContainer}>
+      <Pressable onPress={onBack} style={styles.backBtn} hitSlop={12}>
+        <Ionicons name="arrow-back" size={24} color={Colors.text} />
+      </Pressable>
+      <View style={styles.stepIconContainer}>
+        <View style={[styles.stepIconBg, { backgroundColor: '#E8EEF8' }]}>
+          <Ionicons name="location-outline" size={36} color={Colors.primaryLight} />
+        </View>
+      </View>
+      <Text style={styles.stepTitle}>Service Area</Text>
+      <Text style={styles.stepSubtitle}>
+        Where do you work from, and how far will you travel? Jobs outside this area won't auto-book — you'll be notified to review them.
+      </Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Base address</Text>
+          <TextInput
+            style={styles.input}
+            value={baseAddress}
+            onChangeText={setBaseAddress}
+            placeholder="e.g. 12 Smith St, Parramatta NSW 2150"
+            placeholderTextColor={Colors.textTertiary}
+            autoCapitalize="words"
+          />
+          <Text style={styles.inputHint}>Use a full address with suburb and postcode for the best match.</Text>
+        </View>
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Travel radius (km)</Text>
+          <TextInput
+            style={styles.input}
+            value={serviceRadius}
+            onChangeText={(v) => setServiceRadius(v.replace(/[^0-9]/g, ''))}
+            placeholder="30"
+            placeholderTextColor={Colors.textTertiary}
+            keyboardType="number-pad"
+            maxLength={3}
+          />
+          <Text style={styles.inputHint}>How far you're willing to drive from your base. Most tradies set 20–50km.</Text>
+        </View>
+      </ScrollView>
+      <View style={styles.bottomAction}>
+        <Pressable
+          style={[styles.primaryBtn, !canSubmit && styles.primaryBtnDisabled]}
+          onPress={onNext}
+          disabled={!canSubmit}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <>
+              <Text style={styles.primaryBtnText}>Finish Setup</Text>
+              <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
+            </>
+          )}
+        </Pressable>
+      </View>
+    </Animated.View>
+  );
+}
+
 function DoneStep({ onFinish }: { onFinish: () => void }) {
   return (
     <Animated.View entering={FadeIn.duration(600)} style={styles.stepContainer}>
@@ -389,13 +468,16 @@ export default function OnboardingScreen() {
   const [twilioSid, setTwilioSid] = useState('');
   const [twilioToken, setTwilioToken] = useState('');
   const [twilioPhone, setTwilioPhone] = useState('');
+  const [baseAddress, setBaseAddress] = useState('');
+  const [serviceRadius, setServiceRadius] = useState('30');
   const [saving, setSaving] = useState(false);
+  const [savingArea, setSavingArea] = useState(false);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
 
-  const progressStep = step >= 1 && step <= 3 ? step - 1 : null;
+  const progressStep = step >= 1 && step <= 4 ? step - 1 : null;
 
-  const handleFinish = useCallback(async () => {
+  const handleSaveBusiness = useCallback(async () => {
     setSaving(true);
     try {
       await updateAppSettings({
@@ -403,14 +485,46 @@ export default function OnboardingScreen() {
         twilioAccountSid: twilioSid.trim(),
         twilioAuthToken: twilioToken.trim(),
         twilioPhoneNumber: twilioPhone.trim(),
-        onboardingComplete: true,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSaving(false);
       setStep(4);
     } catch {
       setSaving(false);
     }
   }, [businessName, twilioSid, twilioToken, twilioPhone, updateAppSettings]);
+
+  const handleFinish = useCallback(async () => {
+    setSavingArea(true);
+    const radiusNum = parseInt(serviceRadius, 10) || 30;
+    try {
+      // Validate by geocoding before saving so we don't store an unfindable address.
+      const lookup: any = await apiRequest('POST', '/api/settings/geocode', { address: baseAddress.trim() });
+      const ok = lookup && typeof lookup.lat === 'number' && typeof lookup.lng === 'number';
+      await updateAppSettings({
+        baseAddress: baseAddress.trim(),
+        ...(ok ? { baseLat: lookup.lat, baseLng: lookup.lng } : {}),
+        serviceRadiusKm: radiusNum,
+        onboardingComplete: true,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSavingArea(false);
+      setStep(5);
+    } catch (err: any) {
+      // Even if geocoding fails, save the address+radius and complete onboarding.
+      // The service-area check stays disabled until the address can be looked up
+      // (the user can retry from Settings).
+      try {
+        await updateAppSettings({
+          baseAddress: baseAddress.trim(),
+          serviceRadiusKm: radiusNum,
+          onboardingComplete: true,
+        });
+      } catch {}
+      setSavingArea(false);
+      setStep(5);
+    }
+  }, [baseAddress, serviceRadius, updateAppSettings]);
 
   const handleComplete = useCallback(async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -452,12 +566,23 @@ export default function OnboardingScreen() {
           <BusinessStep
             businessName={businessName}
             setBusinessName={setBusinessName}
-            onNext={handleFinish}
+            onNext={handleSaveBusiness}
             onBack={() => setStep(2)}
             saving={saving}
           />
         )}
-        {step === 4 && <DoneStep onFinish={handleComplete} />}
+        {step === 4 && (
+          <ServiceAreaStep
+            baseAddress={baseAddress}
+            setBaseAddress={setBaseAddress}
+            serviceRadius={serviceRadius}
+            setServiceRadius={setServiceRadius}
+            onNext={handleFinish}
+            onBack={() => setStep(3)}
+            saving={savingArea}
+          />
+        )}
+        {step === 5 && <DoneStep onFinish={handleComplete} />}
       </View>
     </KeyboardAvoidingView>
   );
