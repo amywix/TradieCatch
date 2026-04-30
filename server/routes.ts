@@ -921,7 +921,7 @@ async function handleMissedCallAndRespond(
   // Falls back automatically to text-to-speech if no custom recording is stored.
   const greetingTwiml = recordingUrl
     ? `<Play>${recordingUrl}</Play>`
-    : `<Say voice="Polly.Olivia-Neural">${voiceMessage}</Say>`;
+    : `<Say voice="Polly.Olivia-Neural">${voiceMessage} Thanks for calling ${businessName}.</Say>`;
 
   if (voicemailEnabled && missedCallId) {
     const recCb = `${baseUrl}/api/twilio/recording-callback?missedCallId=${encodeURIComponent(missedCallId)}`;
