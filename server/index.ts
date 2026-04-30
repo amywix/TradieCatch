@@ -277,14 +277,6 @@ async function bootstrapDefaultUser() {
 
     const allUsers = await db.select().from(users);
     if (allUsers.length > 0) {
-      // Always make sure the admin account is flagged as the operator (sales pipeline access).
-      // This block must run on every boot regardless of which downstream branch we hit.
-      const adminUser = allUsers.find(u => u.email === 'admin@tradiecatch.com');
-      if (adminUser && !adminUser.isOperator) {
-        await db.update(users).set({ isOperator: true }).where(eq(users.id, adminUser.id));
-        log('Bootstrap: marked admin@tradiecatch.com as operator');
-      }
-
       const allSettings = await db.select().from(settings);
       const firstUser = allUsers[0];
       const userSettings = allSettings.find(s => s.userId === firstUser.id);
@@ -339,7 +331,6 @@ async function bootstrapDefaultUser() {
       password: hashedPassword,
       mustChangePassword: false,
       acceptedTermsAt: new Date(),
-      isOperator: true,
     }).returning();
 
     await db.insert(settings).values({
@@ -418,17 +409,6 @@ async function initStripe() {
           return res.status(500).json({ error: 'Webhook processing error' });
         }
         await WebhookHandlers.processWebhook(req.body as Buffer, sig);
-
-        // After signature verification by stripe-replit-sync, dispatch our own handlers
-        try {
-          const event = JSON.parse((req.body as Buffer).toString('utf8'));
-          if (event?.type === 'checkout.session.completed') {
-            const { markLeadPaidFromCheckoutSession } = await import('./sales-flow');
-            await markLeadPaidFromCheckoutSession(event.data?.object);
-          }
-        } catch (dispatchErr) {
-          console.error('Sales webhook dispatch error:', dispatchErr);
-        }
 
         res.status(200).json({ received: true });
       } catch (error: any) {

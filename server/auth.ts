@@ -75,7 +75,6 @@ export async function register(req: Request, res: Response) {
         username: user.username,
         mustChangePassword: user.mustChangePassword,
         acceptedTermsAt: user.acceptedTermsAt ? user.acceptedTermsAt.toISOString() : null,
-        isOperator: user.isOperator,
       },
     });
   } catch (err: any) {
@@ -113,7 +112,6 @@ export async function login(req: Request, res: Response) {
         username: user.username,
         mustChangePassword: user.mustChangePassword,
         acceptedTermsAt: user.acceptedTermsAt ? user.acceptedTermsAt.toISOString() : null,
-        isOperator: user.isOperator,
       },
     });
   } catch (err) {
@@ -134,22 +132,9 @@ export async function getMe(req: AuthRequest, res: Response) {
       username: user.username,
       mustChangePassword: user.mustChangePassword,
       acceptedTermsAt: user.acceptedTermsAt ? user.acceptedTermsAt.toISOString() : null,
-      isOperator: user.isOperator,
     });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch user" });
-  }
-}
-
-export async function requireOperator(req: AuthRequest, res: Response, next: NextFunction) {
-  try {
-    const [user] = await db.select().from(users).where(eq(users.id, req.userId!));
-    if (!user?.isOperator) {
-      return res.status(403).json({ error: "Operator access required" });
-    }
-    next();
-  } catch (err) {
-    res.status(500).json({ error: "Operator check failed" });
   }
 }
 

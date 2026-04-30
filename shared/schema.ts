@@ -16,55 +16,10 @@ export const users = pgTable("users", {
   mustChangePassword: boolean("must_change_password").default(true).notNull(),
   acceptedTermsAt: timestamp("accepted_terms_at"),
   acceptedTermsVersion: text("accepted_terms_version"),
-  isOperator: boolean("is_operator").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const TERMS_VERSION = "2026-04-30";
-
-export const LEAD_STAGES = ["new", "qualified", "demo", "proposal", "closed"] as const;
-export type LeadStage = (typeof LEAD_STAGES)[number];
-
-export const leads = pgTable("leads", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull().default(""),
-  phone: text("phone").notNull(),
-  email: text("email").default(""),
-  address: text("address").default(""),
-  jobNotes: text("job_notes").default(""),
-  stage: text("stage").default("new").notNull(),
-  paid: boolean("paid").default(false).notNull(),
-  calendlyEventTime: timestamp("calendly_event_time"),
-  calendlyEventUri: text("calendly_event_uri"),
-  stripeSessionId: text("stripe_session_id"),
-  outcome: text("outcome").default(""),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const leadMessages = pgTable("lead_messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  leadId: varchar("lead_id").notNull(),
-  direction: text("direction").notNull(),
-  body: text("body").notNull(),
-  twilioSid: text("twilio_sid"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const SALES_SETTINGS_ID = "singleton";
-
-export const salesSettings = pgTable("sales_settings", {
-  id: varchar("id").primaryKey().default(SALES_SETTINGS_ID),
-  demoVideoUrl: text("demo_video_url").default(""),
-  calendlyUrl: text("calendly_url").default(""),
-  setupFeeAmountCents: integer("setup_fee_amount_cents").default(29900).notNull(),
-  setupFeeProductName: text("setup_fee_product_name").default("TradieCatch Setup Fee").notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export type Lead = typeof leads.$inferSelect;
-export type LeadMessage = typeof leadMessages.$inferSelect;
-export type SalesSettings = typeof salesSettings.$inferSelect;
 
 export const missedCalls = pgTable("missed_calls", {
   id: varchar("id")

@@ -8,8 +8,6 @@ import { missedCalls, jobs, settings, smsTemplates, users, DEFAULT_SERVICES } fr
 import { eq, desc, and, not, SQL } from "drizzle-orm";
 import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
 import { register, login, getMe, changePassword, acceptTerms, requireAuth, type AuthRequest } from "./auth";
-import { registerSalesRoutes } from "./sales-routes";
-import { tryHandleSalesInbound } from "./sales-flow";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 function paramId(req: Request | AuthRequest): string {
@@ -282,12 +280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(`Incoming SMS from ${from} to ${to}: ${body}`);
 
     try {
-      // Try the sales pipeline flow first (operator-owned Twilio number + known lead).
-      // Falls through to the regular tradie SMS handler if it doesn't match.
-      const handledBySales = await tryHandleSalesInbound(from, body, to);
-      if (!handledBySales) {
-        await handleIncomingReply(from, body, to);
-      }
+      await handleIncomingReply(from, body, to);
     } catch (err) {
       console.error("Webhook handler error:", err);
     }
@@ -776,9 +769,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
 
-
-  // Sales pipeline routes (operator portal)
-  registerSalesRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;

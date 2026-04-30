@@ -24,9 +24,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
 
     const first = segments[0] || '';
-    // Sales operator portal owns its own auth — let it through.
-    if (first === 'sales' || first === 'sales-login') return;
-
     const onLoginScreen = first === 'login';
 
     if (!isAuthenticated && !onLoginScreen) {
@@ -51,8 +48,6 @@ function RootLayoutNav() {
       <Stack.Screen name="add-call" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="edit-template" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="conversation" options={{ headerShown: false }} />
-      <Stack.Screen name="sales-login" options={{ headerShown: false, gestureEnabled: false }} />
-      <Stack.Screen name="sales" options={{ headerShown: false }} />
     </Stack>
   );
 }

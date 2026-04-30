@@ -7,9 +7,6 @@ interface User {
   id: string;
   email: string;
   username: string;
-  mustChangePassword?: boolean;
-  acceptedTermsAt?: string | null;
-  isOperator?: boolean;
 }
 
 interface AuthContextValue {
