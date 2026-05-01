@@ -7,7 +7,7 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { getApiUrl } from '@/lib/query-client';
+import { apiRequest, getApiUrl } from '@/lib/query-client';
 import { useData, MissedCall } from '@/lib/data-context';
 import { formatTimeAgo, formatTime, getInitials, getAvatarColor, confirmAction } from '@/lib/helpers';
 
@@ -141,15 +141,18 @@ function CallItem({ item, onSendAutoSms, onBookJob, onDelete, onViewConvo, sendi
           <Feather name="trash-2" size={15} color={Colors.textTertiary} />
         </Pressable>
       </View>
-      {!!item.voicemailData && (
+      {(!!item.voicemailData || !!item.recordingSid) && (
         <Pressable
           style={styles.voicemailBtn}
-          onPress={() => {
-            const base = getApiUrl();
-            const url = `${base}api/voicemail/${item.id}`;
-            Linking.openURL(url).catch(() =>
-              Alert.alert('Error', 'Could not open voicemail.')
-            );
+          onPress={async () => {
+            try {
+              const res = await apiRequest('GET', `/api/voicemail/${item.id}/link`);
+              const { url } = await res.json();
+              if (!url) throw new Error('No url returned');
+              await Linking.openURL(url);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Could not open voicemail.');
+            }
           }}
           hitSlop={8}
         >

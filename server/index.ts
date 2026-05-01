@@ -310,6 +310,13 @@ async function bootstrapDefaultUser() {
       }
       log('Bootstrap: Users exist but Twilio number not matched to any');
 
+      // Operator account never has the forced password-change gate
+      const adminUser = allUsers.find(u => u.email === 'admin@tradiecatch.com');
+      if (adminUser && adminUser.mustChangePassword !== false) {
+        await db.update(users).set({ mustChangePassword: false }).where(eq(users.id, adminUser.id));
+        log('Bootstrap: cleared mustChangePassword on admin@tradiecatch.com');
+      }
+
       // One-shot admin password reset (remove ADMIN_PASSWORD_RESET env var after use)
       const resetPwd = process.env.ADMIN_PASSWORD_RESET;
       if (resetPwd) {

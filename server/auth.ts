@@ -16,15 +16,33 @@ function generateToken(userId: string): string {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
-export async function register(req: Request, res: Response) {
-  const { email, password, username } = req.body;
+/**
+ * Admin-only: create a fully pre-configured tradie account.
+ * The operator collects business name, address, service radius, services, and the
+ * Twilio number assigned to this tradie via a sales-form intake. We provision
+ * everything here and hand the email + temp password to the tradie. On their
+ * first login they will be forced to change the password (mustChangePassword is
+ * true by default in the schema).
+ */
+export async function createTradie(req: AuthRequest, res: Response) {
+  const {
+    email,
+    password,
+    businessName,
+    twilioPhoneNumber,
+    twilioAccountSid,
+    twilioAuthToken,
+    baseAddress,
+    serviceRadiusKm,
+    services,
+  } = req.body || {};
 
-  if (!email || !password || !username) {
-    return res.status(400).json({ error: "Email, username, and password are required" });
+  if (!email || !password || !businessName) {
+    return res.status(400).json({ error: "Email, business name, and temporary password are required" });
   }
 
   if (password.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters" });
+    return res.status(400).json({ error: "Temporary password must be at least 6 characters" });
   }
 
   try {
@@ -33,29 +51,50 @@ export async function register(req: Request, res: Response) {
       return res.status(400).json({ error: "An account with this email already exists" });
     }
 
-    const existingUsername = await db.select().from(users).where(eq(users.username, username.trim()));
+    const existingUsername = await db.select().from(users).where(eq(users.username, businessName.trim()));
     if (existingUsername.length > 0) {
-      return res.status(400).json({ error: "This username is already taken" });
+      return res.status(400).json({ error: "An account with this business name already exists" });
+    }
+
+    let baseLat: number | null = null;
+    let baseLng: number | null = null;
+    const trimmedAddress = (baseAddress || "").trim();
+    if (trimmedAddress) {
+      try {
+        const { geocodeAddress } = await import("./geo");
+        const geo = await geocodeAddress(trimmedAddress);
+        if (geo) {
+          baseLat = geo.lat;
+          baseLng = geo.lng;
+        }
+      } catch (err) {
+        console.error("createTradie geocode failed:", err);
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
     const [user] = await db.insert(users).values({
       email: email.toLowerCase().trim(),
-      username: username.trim(),
+      username: businessName.trim(),
       password: hashedPassword,
+      mustChangePassword: true,
     }).returning();
 
     await db.insert(settings).values({
       userId: user.id,
-      businessName: "",
+      businessName: businessName.trim(),
       autoReplyEnabled: true,
       bookingCalendarEnabled: true,
       bookingSlots: ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
-      services: DEFAULT_SERVICES,
-      twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || "",
-      twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || "",
-      twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || "",
+      services: Array.isArray(services) && services.length > 0 ? services : DEFAULT_SERVICES,
+      twilioAccountSid: (twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "").trim(),
+      twilioAuthToken: (twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "").trim(),
+      twilioPhoneNumber: (twilioPhoneNumber || "").trim(),
+      baseAddress: trimmedAddress,
+      baseLat,
+      baseLng,
+      serviceRadiusKm: typeof serviceRadiusKm === "number" && serviceRadiusKm > 0 ? Math.floor(serviceRadiusKm) : 30,
     });
 
     await db.insert(smsTemplates).values({
@@ -65,21 +104,18 @@ export async function register(req: Request, res: Response) {
       isDefault: true,
     });
 
-    const token = generateToken(user.id);
-
     res.json({
-      token,
+      ok: true,
       user: {
         id: user.id,
         email: user.email,
         username: user.username,
-        mustChangePassword: user.mustChangePassword,
-        acceptedTermsAt: user.acceptedTermsAt ? user.acceptedTermsAt.toISOString() : null,
       },
+      geocoded: baseLat != null && baseLng != null,
     });
   } catch (err: any) {
-    console.error("Registration error:", err);
-    res.status(500).json({ error: "Registration failed. Please try again." });
+    console.error("createTradie error:", err);
+    res.status(500).json({ error: "Could not create tradie account. Please try again." });
   }
 }
 
@@ -184,7 +220,22 @@ export async function acceptTerms(req: AuthRequest, res: Response) {
   }
 }
 
-export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+/**
+ * Endpoints that an authenticated user can hit even when their account still
+ * has mustChangePassword=true (so they can finish first-login setup).
+ */
+const PASSWORD_GATE_ALLOWLIST: ReadonlyArray<string> = [
+  "/api/auth/me",
+  "/api/auth/change-password",
+  "/api/auth/accept-terms",
+  "/api/auth/logout",
+];
+
+export async function requireAuth(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -193,12 +244,57 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
 
   const token = authHeader.split(" ")[1];
 
+  let userId: string;
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    req.userId = decoded.userId;
-    next();
+    userId = decoded.userId;
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired token" });
+  }
+
+  req.userId = userId;
+
+  // Server-side first-login gate: block everything except the allow-list
+  // until the user has chosen their own password.
+  try {
+    const path = req.originalUrl.split("?")[0];
+    if (!PASSWORD_GATE_ALLOWLIST.includes(path)) {
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(401).json({ error: "Authentication required" });
+      if (user.mustChangePassword) {
+        return res.status(403).json({
+          error: "Password change required",
+          code: "MUST_CHANGE_PASSWORD",
+        });
+      }
+    }
+  } catch (err) {
+    console.error("requireAuth password-gate error:", err);
+    return res.status(500).json({ error: "Authorization check failed" });
+  }
+
+  next();
+}
+
+export const ADMIN_EMAIL = "admin@tradiecatch.com";
+
+/**
+ * Operator-only middleware. Run AFTER requireAuth. Confirms the authenticated
+ * user is the operator account (single admin email). Used to gate endpoints
+ * like creating tradie accounts.
+ */
+export async function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    if (!req.userId) return res.status(401).json({ error: "Authentication required" });
+    const [user] = await db.select().from(users).where(eq(users.id, req.userId));
+    if (!user) return res.status(401).json({ error: "Authentication required" });
+    if (user.email !== ADMIN_EMAIL) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    next();
+  } catch (err) {
+    console.error("requireAdmin error:", err);
+    return res.status(500).json({ error: "Authorization check failed" });
   }
 }
 

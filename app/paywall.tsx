@@ -26,7 +26,7 @@ export default function PaywallScreen() {
     setCheckingSubscription(false);
     if (active) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace('/onboarding');
+      router.replace('/(tabs)');
     } else {
       setErrorMsg("We couldn't find an active subscription for your account yet. If you've just paid, wait a moment and try again — or contact us at hello@tradiecatch.com.");
     }

@@ -15,7 +15,7 @@ import { usePushNotifications } from "@/lib/use-push-notifications";
 SplashScreen.preventAutoHideAsync();
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   usePushNotifications();
   const router = useRouter();
   const segments = useSegments();
@@ -25,13 +25,24 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
     const first = segments[0] || '';
     const onLoginScreen = first === 'login';
+    const onChangePasswordScreen = first === 'change-password';
+    const mustChangePassword = !!user?.mustChangePassword;
 
     if (!isAuthenticated && !onLoginScreen) {
       router.replace('/login');
-    } else if (isAuthenticated && onLoginScreen) {
+      return;
+    }
+
+    if (isAuthenticated && mustChangePassword && !onChangePasswordScreen) {
+      // Force-redirect to the password change screen and block everything else
+      router.replace('/change-password');
+      return;
+    }
+
+    if (isAuthenticated && !mustChangePassword && (onLoginScreen || onChangePasswordScreen)) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, segments]);
+  }, [isAuthenticated, isLoading, segments, user?.mustChangePassword]);
 
   return <>{children}</>;
 }
@@ -42,7 +53,8 @@ function RootLayoutNav() {
       <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="paywall" options={{ headerShown: false, gestureEnabled: false }} />
-      <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="change-password" options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="admin-create-tradie" options={{ headerShown: true, title: "Create Tradie Account", presentation: 'modal' }} />
       <Stack.Screen name="book-job" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="send-sms" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="add-call" options={{ headerShown: false, presentation: 'modal' }} />

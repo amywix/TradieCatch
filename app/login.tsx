@@ -1,64 +1,29 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, Pressable, TextInput, Platform, Alert,
-  ActivityIndicator, KeyboardAvoidingView, ScrollView,
+  ActivityIndicator, KeyboardAvoidingView, ScrollView, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 
-type Screen = 'landing' | 'register' | 'login';
+type Screen = 'landing' | 'login';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { login, register } = useAuth();
+  const { login } = useAuth();
 
   const [screen, setScreen] = useState<Screen>('landing');
   const [email, setEmail] = useState('');
-  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const topInset = Platform.OS === 'web' ? 67 : insets.top;
   const bottomInset = Platform.OS === 'web' ? 34 : insets.bottom;
-
-  const handleRegister = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Missing Info', 'Please enter your email and password.');
-      return;
-    }
-    if (!username.trim()) {
-      Alert.alert('Missing Info', 'Please enter a business name.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      Alert.alert('Password Mismatch', 'Passwords do not match.');
-      return;
-    }
-    if (password.length < 6) {
-      Alert.alert('Weak Password', 'Password must be at least 6 characters.');
-      return;
-    }
-    if (!agreedToTerms) {
-      Alert.alert('Please Agree', 'You need to agree to the Terms of Service and Privacy Policy before creating your account.');
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      await register(email.trim(), username.trim(), password);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Something went wrong. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -77,8 +42,15 @@ export default function LoginScreen() {
 
   const goBack = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (screen === 'register') setScreen('landing');
-    else if (screen === 'login') setScreen('landing');
+    setScreen('landing');
+  };
+
+  const openSalesContact = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const url = 'mailto:hello@tradiecatch.com?subject=TradieCatch%20signup%20enquiry';
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Get in touch', 'Email us at hello@tradiecatch.com to set up your account.');
+    });
   };
 
   if (screen === 'landing') {
@@ -100,26 +72,22 @@ export default function LoginScreen() {
 
         <Animated.View entering={FadeInUp.delay(500).duration(500)} style={styles.landingActions}>
           <Pressable
-            style={styles.trialBtn}
+            style={styles.primaryBtn}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              setScreen('register');
-            }}
-            testID="trial-btn"
-          >
-            <Ionicons name="flash" size={20} color={Colors.white} />
-            <Text style={styles.trialBtnText}>Get Started</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.loginBtn}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setScreen('login');
             }}
             testID="login-btn"
           >
-            <Text style={styles.loginBtnText}>Already have an account? Sign In</Text>
+            <Text style={styles.primaryBtnText}>Sign In</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.secondaryBtn}
+            onPress={openSalesContact}
+            testID="enquire-btn"
+          >
+            <Text style={styles.secondaryBtnText}>Don't have an account? Get in touch</Text>
           </Pressable>
         </Animated.View>
       </View>
@@ -144,14 +112,8 @@ export default function LoginScreen() {
             <View style={styles.formLogoBg}>
               <Ionicons name="flash" size={28} color={Colors.accent} />
             </View>
-            <Text style={styles.formTitle}>
-              {screen === 'register' ? 'Create Your Account' : 'Welcome Back'}
-            </Text>
-            <Text style={styles.formSubtitle}>
-              {screen === 'register'
-                ? 'Sign up to get started'
-                : 'Sign in to your TradieCatch account'}
-            </Text>
+            <Text style={styles.formTitle}>Welcome Back</Text>
+            <Text style={styles.formSubtitle}>Sign in to your TradieCatch account</Text>
           </View>
 
           <View style={styles.inputGroup}>
@@ -172,24 +134,6 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {screen === 'register' && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Business Name</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="business-outline" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  value={username}
-                  onChangeText={setUsername}
-                  placeholder="e.g. Dave's Electrical"
-                  placeholderTextColor={Colors.textTertiary}
-                  autoCapitalize="words"
-                  testID="username-input"
-                />
-              </View>
-            </View>
-          )}
-
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
             <View style={styles.inputWrapper}>
@@ -209,83 +153,23 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {screen === 'register' && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  placeholder="Confirm password"
-                  placeholderTextColor={Colors.textTertiary}
-                  secureTextEntry={!showPassword}
-                  testID="confirm-password-input"
-                />
-              </View>
-            </View>
-          )}
-
-          {screen === 'register' && (
-            <Pressable
-              style={styles.termsRow}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setAgreedToTerms((v) => !v);
-              }}
-              testID="terms-checkbox"
-            >
-              <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
-                {agreedToTerms && <Ionicons name="checkmark" size={16} color={Colors.white} />}
-              </View>
-              <Text style={styles.termsText}>
-                I agree to the{' '}
-                <Text
-                  style={styles.termsLink}
-                  onPress={(e) => { (e as any).stopPropagation?.(); router.push('/terms-of-service'); }}
-                >
-                  Terms of Service
-                </Text>
-                {' '}and{' '}
-                <Text
-                  style={styles.termsLink}
-                  onPress={(e) => { (e as any).stopPropagation?.(); router.push('/privacy-policy'); }}
-                >
-                  Privacy Policy
-                </Text>
-                .
-              </Text>
-            </Pressable>
-          )}
-
           <Pressable
             style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
-            onPress={screen === 'register' ? handleRegister : handleLogin}
+            onPress={handleLogin}
             disabled={isSubmitting}
             testID="submit-btn"
           >
             {isSubmitting ? (
               <ActivityIndicator color={Colors.white} />
             ) : (
-              <Text style={styles.submitBtnText}>
-                {screen === 'register' ? 'Create Account' : 'Sign In'}
-              </Text>
+              <Text style={styles.submitBtnText}>Sign In</Text>
             )}
           </Pressable>
 
-          <Pressable
-            style={styles.switchBtn}
-            onPress={() => {
-              setPassword('');
-              setConfirmPassword('');
-              setScreen(screen === 'register' ? 'login' : 'register');
-            }}
-            testID="switch-auth-btn"
-          >
+          <Pressable style={styles.switchBtn} onPress={openSalesContact}>
             <Text style={styles.switchText}>
-              {screen === 'register' ? 'Already have an account? ' : "Don't have an account? "}
-              <Text style={styles.switchTextBold}>{screen === 'register' ? 'Sign In' : 'Sign Up'}</Text>
+              Don't have an account?{' '}
+              <Text style={styles.switchTextBold}>Get in touch</Text>
             </Text>
           </Pressable>
         </Animated.View>
@@ -362,23 +246,7 @@ const styles = StyleSheet.create({
   landingActions: {
     gap: 12,
   },
-  trialBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255, 107, 53, 0.12)',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    alignSelf: 'center',
-  },
-  trialBadgeText: {
-    fontSize: 13,
-    fontFamily: 'Inter_500Medium',
-    color: Colors.accent,
-  },
-  trialBtn: {
+  primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -387,16 +255,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 18,
   },
-  trialBtnText: {
+  primaryBtnText: {
     fontSize: 18,
     fontFamily: 'Inter_700Bold',
     color: Colors.white,
   },
-  loginBtn: {
+  secondaryBtn: {
     alignItems: 'center',
     paddingVertical: 14,
   },
-  loginBtnText: {
+  secondaryBtnText: {
     fontSize: 15,
     fontFamily: 'Inter_500Medium',
     color: 'rgba(255,255,255,0.7)',
@@ -506,40 +374,5 @@ const styles = StyleSheet.create({
   switchTextBold: {
     fontFamily: 'Inter_700Bold',
     color: Colors.accent,
-  },
-  termsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginTop: 4,
-    marginBottom: 12,
-    paddingVertical: 4,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-  },
-  checkboxChecked: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
-  },
-  termsText: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: Colors.textSecondary,
-    lineHeight: 19,
-  },
-  termsLink: {
-    fontFamily: 'Inter_600SemiBold',
-    color: Colors.accent,
-    textDecorationLine: 'underline',
   },
 });

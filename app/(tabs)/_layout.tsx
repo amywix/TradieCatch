@@ -114,11 +114,12 @@ export default function TabLayout() {
     if (!isPro) {
       hasRedirected.current = true;
       router.replace('/paywall');
-    } else if (!settings.onboardingComplete) {
-      hasRedirected.current = true;
-      router.replace('/onboarding');
     }
-  }, [isLoading, subLoading, isPro, settings.onboardingComplete]);
+    // Onboarding wizard removed: every tradie account is provisioned by the
+    // operator before first login (business name, service area, Twilio number,
+    // services all pre-set). The forced password change is handled by AuthGate
+    // in app/_layout.tsx.
+  }, [isLoading, subLoading, isPro]);
 
   if (isLoading || subLoading) {
     return (

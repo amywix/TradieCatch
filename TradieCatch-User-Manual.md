@@ -1,6 +1,6 @@
 # TradieCatch — Complete User Manual
 
-_Last updated: April 2026_
+_Last updated: May 2026_
 
 ---
 
@@ -9,8 +9,8 @@ _Last updated: April 2026_
 1. [What is TradieCatch?](#1-what-is-tradiecatch)
 2. [Getting Started](#2-getting-started)
 3. [Privacy & Terms](#3-privacy--terms)
-4. [Setting Up Twilio (Your Phone System)](#4-setting-up-twilio-your-phone-system)
-5. [Onboarding Walkthrough](#5-onboarding-walkthrough)
+4. [What's Already Set Up For You](#4-whats-already-set-up-for-you)
+5. [First Login](#5-first-login)
 6. [The Calls Tab](#6-the-calls-tab)
 7. [How the Automated SMS Bot Works](#7-how-the-automated-sms-bot-works)
 8. [Service Area & Travel Radius](#8-service-area--travel-radius)
@@ -32,8 +32,8 @@ TradieCatch is an app for tradespeople (electricians, plumbers, etc.) that autom
 
 **Here's what happens when someone calls and you can't answer:**
 
-1. Twilio (your virtual phone number) picks up and plays your greeting
-2. The caller can leave a voicemail (optional)
+1. Your dedicated TradieCatch business number picks up and plays your greeting
+2. The caller can leave a voicemail (optional) — it's stored on the phone-system side and streamed to you on demand when you tap it in the app, so nothing audio sits on our servers
 3. TradieCatch instantly sends them an SMS to follow up
 4. An automated conversation gathers their name, the job, the address, their email, and a preferred time
 5. If the address is inside your travel area, the bot books the job and you get notified
@@ -45,120 +45,81 @@ You don't have to do anything while you're on the tools — the bot handles it a
 
 ## 2. Getting Started
 
-### Creating Your Account
+### How accounts are created
 
-1. Open the TradieCatch app (or visit the website if you're using it from a browser)
-2. Tap **Get Started**
-3. Enter your:
-   - Email address
-   - Business name (this is what shows in SMS messages to your customers)
-   - Password (at least 6 characters)
-   - Confirm your password
-4. **Tick the box** to agree to the Terms of Service and Privacy Policy. You can tap either link to read them in full before agreeing.
-5. Tap **Create Account**
+TradieCatch is fully managed. You don't sign yourself up inside the app — once you've spoken with us and your subscription is sorted, we set up your account for you and email you a temporary password. There is no public signup form.
 
-### Logging In
+### Logging in for the first time
 
-1. Open the app
-2. Enter your email and password
-3. Tap **Sign In**
+1. Open the TradieCatch app (or open the web version in a browser)
+2. Tap **Sign In**
+3. Enter the email address we used to create your account, and the temporary password we sent you
+4. The app will immediately ask you to set a new password of your own — this is a one-time step. After that, you're in.
 
 Your login is saved — you won't need to sign in again each time you open the app unless you tap Sign Out from Settings.
 
 ### What Happens Next
 
-After your account is created, the app will check whether your subscription is active. If it isn't, you'll land on the paywall screen — see [Subscription & Billing](#15-subscription--billing) for how to activate your account.
+Once your password is set, the app checks your subscription. If it isn't active yet, you'll land on the paywall screen — see [Subscription & Billing](#15-subscription--billing).
 
-Once your subscription is active, you'll be walked through onboarding (about 5 steps) to get your Twilio number connected and your service area set up.
+Once your subscription is active, the app drops you straight into the **Calls** tab. There's no setup wizard to sit through — your phone number, business name, service area and services list have all been configured for you in advance.
 
 ---
 
 ## 3. Privacy & Terms
 
-When you create your account, you must agree to two documents:
+When your account is provisioned, you're bound by two documents:
 
 - **Terms of Service** — the rules for using TradieCatch (subscription, billing, lawful use, your obligations under the Spam Act, etc.)
 - **Privacy Policy** — what data we collect, how it's stored, and your rights
 
-Both are linked directly on the signup screen, and you can read them anytime from **Settings → About → Terms of Service / Privacy Policy**.
+You can read both anytime from **Settings → About → Terms of Service / Privacy Policy**.
 
-The date you accepted is recorded against your account. If we ever update the terms in a meaningful way, we'll let you know in the app.
+If we ever update the terms in a meaningful way, we'll let you know in the app.
 
 A few things worth knowing in plain language:
 
 - **You own your customer data.** Customer phone numbers, addresses, emails, and job details collected via the SMS bot live in your account only. We don't sell or share that data.
-- **Twilio costs are separate** from your TradieCatch subscription. You pay Twilio directly for your phone number, SMS, and voice minutes.
+- **Your phone number, SMS and voice minutes are included** in your TradieCatch subscription, up to a fair-use cap (1,000 SMS per month and 500 voice minutes per month). You won't get a separate Twilio bill. If your usage consistently goes over the cap we'll talk to you about a higher tier first — we won't silently bill you extra.
 - **You're responsible for your messaging** under Australia's Spam Act 2003. Because the bot only replies to people who already called or texted you, you have inferred consent — but it's still your business and your responsibility.
-- **Your password** is stored as a one-way encrypted hash. Even we can't see it.
+- **Voicemail audio is not stored on our servers.** Recordings live on the phone-system side and are streamed to you on demand when you tap the link in the app.
+- **Your password** is stored as a one-way encrypted hash. Even we can't see it. The temporary password we email you is replaced with one only you know on your first login.
 
 ---
 
-## 4. Setting Up Twilio (Your Phone System)
+## 4. What's Already Set Up For You
 
-TradieCatch uses **Twilio** to give you a dedicated phone number that handles missed calls and sends SMS messages. You need a Twilio account to use the app.
+When your account is provisioned, the following is done for you up-front — there is nothing to configure on day one:
 
-### Step 1: Create a Twilio Account
-
-1. Go to **twilio.com** and sign up for a free account
-2. Verify your email and phone number
-3. Complete Twilio's setup steps
-
-### Step 2: Get a Twilio Phone Number
-
-1. In Twilio, go to **Phone Numbers → Manage → Buy a Number**
-2. Search for a number in your area (Australian numbers are available)
-3. Purchase the number (costs a few dollars per month)
-
-### Step 3: Find Your Credentials
-
-You'll need three things from Twilio:
-
-| What you need | Where to find it |
+| What | Done by us |
 |---|---|
-| **Account SID** | Twilio Console homepage (top left) |
-| **Auth Token** | Twilio Console homepage (click to reveal) |
-| **Phone Number** | Phone Numbers → Manage → Active Numbers |
+| Your dedicated business phone number | Provisioned and connected |
+| SMS and voice routing (webhooks) | Configured |
+| Your business name (used in SMS to customers) | Set from your sign-up details |
+| Your base address + travel radius | Set from your sign-up details |
+| Your default services list | Pre-loaded — you can edit anytime in Settings |
+| Voicemail-on-demand streaming | Connected |
 
-### Step 4: Set Up the Webhook URLs
-
-This tells Twilio to notify TradieCatch when a call or SMS comes in.
-
-1. In Twilio, go to **Phone Numbers → Manage → Active Numbers**
-2. Click your number
-3. Under **Voice & Fax**, set "A Call Comes In" to:
-   ```
-   https://your-app-url/api/twilio/voice
-   ```
-4. Under **Messaging**, set "A Message Comes In" to:
-   ```
-   https://your-app-url/api/twilio/webhook
-   ```
-5. Save
-
-> **Tip:** Your exact webhook URLs are shown in the app at the end of onboarding and again in **Settings → Twilio Setup**. Just copy and paste them into Twilio.
+Everything above can still be changed by you later from the **Settings** tab if your business details change (new address, larger service area, new services, etc.) — except the phone number itself, which is managed by us. Just contact us if you need that changed.
 
 ---
 
-## 5. Onboarding Walkthrough
+## 5. First Login
 
-After your subscription is active, the app walks you through a short setup. There's a Welcome screen, four numbered steps, and a Done screen at the end:
+Your first login is the only setup step on your side, and it takes about 30 seconds:
 
-| Screen | What happens |
-|---|---|
-| **Welcome** | Quick overview of what TradieCatch does |
-| **Step 1 — Get Twilio** | Instructions for signing up with Twilio and buying a number |
-| **Step 2 — Connect** | Enter your Twilio Account SID, Auth Token, and Phone Number |
-| **Step 3 — Business** | Confirm your business name (used in SMS messages to customers) |
-| **Step 4 — Service Area** | Enter your base address and travel radius (km). The app geocodes the address so it can later check whether an incoming customer is inside your area. |
-| **Done** | Copy your webhook URLs into Twilio to complete setup |
+1. Open the app and tap **Sign In**
+2. Enter the email + temporary password we sent you
+3. You'll be taken to the **Set your password** screen — type a new password (at least 6 characters) and confirm it
+4. Tap **Save** — you're now in the **Calls** tab and the app is live
 
-Once onboarding is done, the app is live and ready to handle missed calls. You can change any of these settings later from the Settings tab.
+That's it. The app is already set up for you and ready to handle missed calls from this point on.
 
 ---
 
 ## 6. The Calls Tab
 
-This is your main dashboard. Every call that comes in through your Twilio number appears here.
+This is your main dashboard. Every call that comes in through your dedicated business number appears here.
 
 ### What You See on Each Call Card
 
@@ -193,7 +154,7 @@ Under each call you can see exactly where the automated conversation is up to:
 
 ### Manually Adding a Missed Call
 
-If someone called your personal number instead of your Twilio number, you can log it manually:
+If someone called your personal number instead of your TradieCatch business number, you can log it manually:
 
 1. Tap the **+** button in the top right
 2. Enter the caller's name and phone number
@@ -229,7 +190,7 @@ This is one of the smartest features in TradieCatch — it stops the bot from bo
 
 ### How It Works
 
-- During onboarding (and anytime later in **Settings → Service Area**) you set:
+- Your service area is set up for you during account provisioning. You can change it anytime in **Settings → Service Area**, where you can update:
   - Your **base address** (e.g. "12 Smith St, Parramatta NSW 2150")
   - Your **travel radius** in kilometres (e.g. 30)
 - When a customer gives an address in the SMS conversation, the app converts it to a location and measures the distance from your base.
@@ -316,9 +277,9 @@ This is where you configure everything about how TradieCatch works. Sections are
 
 - **Auto-Reply SMS toggle** — turn the bot on or off
 
-### Twilio Setup
+### Your Business Phone Number
 
-Enter your Twilio credentials and copy your webhook URLs into Twilio.
+A read-only display showing the dedicated business phone number TradieCatch is running on your behalf. There's nothing to configure here — if you ever need the number changed, contact us.
 
 ### Voice Greeting
 
@@ -412,7 +373,7 @@ The bot sends a pre-filled Google Calendar link.
 
 ## 13. Voice Greeting Setup
 
-When someone calls your Twilio number, they hear a greeting before voicemail (if voicemail is on).
+When someone calls your TradieCatch business number, they hear a greeting before voicemail (if voicemail is on). Voicemail recordings stay on the phone-system side — when you tap a voicemail link in the Calls tab the audio is streamed to you on demand, so nothing audio is stored on TradieCatch's servers.
 
 ### Option A: Text-to-Speech (Default)
 
@@ -463,14 +424,12 @@ TradieCatch uses Stripe for secure payment processing. The flow is intentionally
 
 ### How Activation Works
 
-1. Sign up for an account
+1. We arrange your subscription with you and create your account
 2. We send you a secure Stripe payment link (via email) tied to your email address
 3. Pay through Stripe — takes about a minute
-4. Open the app, you'll be on the **Subscription Required** screen
-5. Tap **I've Paid — Activate Account**
-6. The app talks to Stripe, finds your active subscription, and unlocks your account immediately
-
-If your subscription is already active when you sign up, the app finds it automatically and you skip straight to onboarding.
+4. We email you your login email and temporary password
+5. Sign in, change your password, and you're in
+6. If you've already paid by the time you sign in, you go straight to the Calls tab. Otherwise tap **I've Paid — Activate Account** on the Subscription Required screen and the app finds your active Stripe subscription and unlocks immediately.
 
 ### Managing Your Subscription
 
@@ -496,10 +455,10 @@ There's no "pause" — only cancel. If you cancel, you keep access until the per
 You don't need to download anything from an app store to get started. TradieCatch runs in any modern browser:
 
 1. Visit your TradieCatch URL on your phone, tablet, or computer
-2. Sign up or sign in
+2. Sign in with the email and temporary password we sent you
 3. Use all the same features (calls, jobs, settings, voice greeting, SMS flow)
 
-This means you can sign up customers immediately without waiting for App Store approval. When the iOS app is published, your account and data work the same in both.
+This means you can be up and running immediately without waiting for App Store approval. When the iOS app is published, your account and data work the same in both.
 
 ---
 
@@ -512,7 +471,7 @@ A: The messages are written to sound natural. Most customers simply reply and ge
 A: The bot handles common variations (e.g., "yes", "yeah", "yep" are all treated the same). If it can't understand a reply, it'll ask the question again. You can always step in manually by viewing the chat and sending your own message.
 
 **Q: Can I use my existing phone number?**
-A: No — TradieCatch requires a Twilio number because Twilio is what receives the calls and sends the SMS. The usual approach is to set up call forwarding from your existing number to your Twilio number, so customers can keep calling your normal number.
+A: TradieCatch needs to receive your calls on the dedicated business number we provision for you, because that's the number wired into our SMS and voice automation. The usual approach is to set up call forwarding from your existing number to your TradieCatch number, so customers can keep calling your normal number and the diverted calls hit our system.
 
 **Q: What if the bot is halfway through a conversation when I want to take over?**
 A: Open the chat in the Calls tab and start typing — your manual messages go through alongside the bot. You can also book the job yourself using the Book button.
@@ -520,8 +479,8 @@ A: Open the chat in the Calls tab and start typing — your manual messages go t
 **Q: Will I get notified when a job is booked?**
 A: Yes — push notification when the bot books a job, and another one when an out-of-area enquiry comes in.
 
-**Q: Can I have more than one Twilio number?**
-A: Currently each TradieCatch account is linked to one Twilio number. If you need multiple numbers, contact support.
+**Q: Can I have more than one business number?**
+A: Each TradieCatch account is linked to one dedicated business number. If you need multiple numbers (e.g. separate for two trades), contact us and we'll sort a multi-number arrangement.
 
 **Q: What does "URGENT" mean on a call?**
 A: If the caller picked an urgent service type (e.g., "Power outage") and confirmed it's an emergency, the call is flagged so you can prioritise it.
@@ -529,19 +488,19 @@ A: If the caller picked an urgent service type (e.g., "Power outage") and confir
 **Q: What happens for customers outside my service area?**
 A: The bot tells them politely that the address is outside your usual area and that you'll review and get back to them directly. It doesn't book the job. You get a push notification and the call shows up with a "Out of service area — manual review" status. See [Service Area](#8-service-area--travel-radius).
 
-**Q: I set up everything but calls aren't coming through — what do I check?**
-A: Run through this checklist:
-1. Your Twilio webhook URLs match exactly what's shown in Settings → Twilio Setup
-2. You actually saved the webhooks in Twilio (easy to forget)
-3. Your Twilio account is active and funded
-4. Auto-Reply is turned ON in Settings
-5. Your subscription is active
+**Q: Calls aren't coming through — what do I check?**
+A: Run through this short checklist:
+1. Your subscription is active (Settings → Subscription)
+2. Auto-Reply is turned ON in Settings
+3. Call forwarding from your normal mobile is pointing at the TradieCatch business number shown in Settings
+
+If those three are good and calls are still missing, contact us — the routing on our side is something we manage and we can check it for you.
 
 **Q: Can I cancel my subscription anytime?**
 A: Yes — Settings → Subscription → Manage → Cancel. You keep access until the end of the period you've already paid for.
 
 **Q: Where can I read the Terms of Service and Privacy Policy?**
-A: On the signup screen (tappable links above the Create Account button), or anytime from Settings → About. Both are also available without signing in by tapping the links on the signup screen.
+A: From the Sign In screen (tappable links at the bottom), or anytime from Settings → About.
 
 **Q: Can I use this on Android and iPhone?**
 A: Yes — TradieCatch runs in a web browser on any device, and is being prepared for the iOS App Store. Android via the App Store is not currently supported on Replit, but the web app works perfectly on Android phones.

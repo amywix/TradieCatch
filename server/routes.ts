@@ -2,12 +2,13 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import * as path from "path";
 import * as fs from "fs";
+import * as crypto from "crypto";
 import { db } from "./db";
 import { sql as rawSql } from "drizzle-orm";
 import { missedCalls, jobs, settings, smsTemplates, users, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, desc, and, not, SQL } from "drizzle-orm";
 import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
-import { register, login, getMe, changePassword, acceptTerms, requireAuth, type AuthRequest } from "./auth";
+import { createTradie, login, getMe, changePassword, acceptTerms, requireAuth, requireAdmin, ADMIN_EMAIL, type AuthRequest } from "./auth";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 function paramId(req: Request | AuthRequest): string {
@@ -15,13 +16,44 @@ function paramId(req: Request | AuthRequest): string {
   return Array.isArray(id) ? id[0] : id;
 }
 
+function voicemailSigningSecret(): string {
+  return process.env.JWT_SECRET || "tradiecatch-jwt-secret-change-in-production";
+}
+
+function signVoicemailToken(callId: string, expEpochMs: number): string {
+  const h = crypto.createHmac("sha256", voicemailSigningSecret());
+  h.update(`${callId}.${expEpochMs}`);
+  return h.digest("base64url");
+}
+
+function verifyVoicemailToken(callId: string, token: string, expEpochMs: number): boolean {
+  if (!token || !expEpochMs) return false;
+  if (Date.now() > expEpochMs) return false;
+  const expected = signVoicemailToken(callId, expEpochMs);
+  if (expected.length !== token.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(token));
+  } catch {
+    return false;
+  }
+}
+
+function buildVoicemailUrl(baseUrl: string, callId: string, ttlMs = 14 * 24 * 60 * 60 * 1000): string {
+  const exp = Date.now() + ttlMs;
+  const t = signVoicemailToken(callId, exp);
+  return `${baseUrl}/api/voicemail/${callId}?t=${t}&exp=${exp}`;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
 
-  app.post("/api/auth/register", register);
+  // Public registration is disabled — operator (admin) provisions every tradie
+  // account via /api/admin/create-tradie after collecting their details on the
+  // sales-form intake.
   app.post("/api/auth/login", login);
   app.get("/api/auth/me", requireAuth, getMe as any);
   app.patch("/api/auth/change-password", requireAuth, changePassword as any);
   app.patch("/api/auth/accept-terms", requireAuth, acceptTerms as any);
+  app.post("/api/admin/create-tradie", requireAuth, requireAdmin, createTradie as any);
 
   app.post("/api/push-token", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
@@ -46,7 +78,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/debug/twilio-numbers", async (_req: Request, res: Response) => {
+  app.get("/api/debug/twilio-numbers", requireAuth, requireAdmin, async (_req: AuthRequest, res: Response) => {
     try {
       const allSettings = await db.select({
         userId: settings.userId,
@@ -359,15 +391,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await handleMissedCallAndRespond(req, res, ownerUserId, settingsRow, caller, callerName, baseUrl);
   });
 
-  // Twilio posts to this when a voicemail recording is finished
+  // Twilio posts here when a voicemail recording is finished. We store ONLY the
+  // RecordingSid + duration. The actual audio stays in Twilio's storage and is
+  // streamed on demand from /api/voicemail/:id — no customer audio is persisted
+  // on TradieCatch servers.
   app.post("/api/twilio/recording-callback", async (req: Request, res: Response) => {
     res.status(200).send("ok");
     try {
       const missedCallId = (req.query.missedCallId as string) || "";
-      const recordingUrl = req.body.RecordingUrl || "";
+      const recordingSid = req.body.RecordingSid || "";
       const recordingDuration = req.body.RecordingDuration || "0";
-      console.log(`Recording callback: missedCallId=${missedCallId}, url=${recordingUrl}, duration=${recordingDuration}s`);
-      if (!missedCallId || !recordingUrl) return;
+      console.log(`Recording callback: missedCallId=${missedCallId}, recordingSid=${recordingSid}, duration=${recordingDuration}s`);
+      if (!missedCallId || !recordingSid) return;
 
       const [call] = await db.select().from(missedCalls).where(eq(missedCalls.id, missedCallId));
       if (!call) { console.log("Recording callback: missed call not found"); return; }
@@ -375,31 +410,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [settingsRow] = await db.select().from(settings).where(eq(settings.userId, call.userId));
       if (!settingsRow) { console.log("Recording callback: settings not found"); return; }
 
-      // Download the recording from Twilio (auth required)
-      const sid = settingsRow.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "";
-      const token = settingsRow.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "";
-      const authHeader = "Basic " + Buffer.from(`${sid}:${token}`).toString("base64");
-
-      const audioRes = await fetch(`${recordingUrl}.mp3`, { headers: { Authorization: authHeader } });
-      if (!audioRes.ok) { console.error(`Failed to download recording: ${audioRes.status}`); return; }
-      const audioBuf = Buffer.from(await audioRes.arrayBuffer());
-      const audioB64 = audioBuf.toString("base64");
-
       await db.update(missedCalls).set({
-        voicemailData: audioB64,
+        recordingSid,
         voicemailMimeType: "audio/mpeg",
         voicemailDurationSeconds: String(recordingDuration),
       }).where(eq(missedCalls.id, missedCallId));
-      console.log(`Voicemail saved for call ${missedCallId} (${audioBuf.length} bytes)`);
+      console.log(`Voicemail SID saved for call ${missedCallId} (audio stays at Twilio)`);
 
-      // SMS the tradie a link to play the voicemail
+      // SMS the tradie a link that proxies to Twilio on demand
       const tradieMobile = (settingsRow.tradieMobileNumber as string || "").trim();
       if (tradieMobile) {
         const baseUrl = getPublicBaseUrl(req);
-        const playUrl = `${baseUrl}/api/voicemail/${missedCallId}`;
+        const playUrl = buildVoicemailUrl(baseUrl, missedCallId);
         const { sendSms } = await import("./sms-conversation");
         const callerLabel = call.callerName && call.callerName !== "Unknown Caller" ? call.callerName : call.phoneNumber;
-        const msg = `📩 New voicemail from ${callerLabel} (${recordingDuration}s).\n\n▶️ Listen: ${playUrl}`;
+        const msg = `New voicemail from ${callerLabel} (${recordingDuration}s).\n\nListen: ${playUrl}`;
         try {
           await sendSms(tradieMobile, msg, call.userId);
           console.log(`Voicemail SMS sent to tradie ${tradieMobile}`);
@@ -414,19 +439,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Public endpoint: streams a stored voicemail audio file (used in tradie SMS link)
+  // Public endpoint: streams a voicemail recording. New recordings live at
+  // Twilio (we proxy on demand using the tradie's Twilio creds). Legacy
+  // recordings stored as base64 in voicemail_data still play back from the DB.
+  // Authenticated endpoint that issues a short-lived signed playback URL
+  // (the browser/system audio player can't carry a Bearer token).
+  app.get("/api/voicemail/:id/link", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const [call] = await db.select().from(missedCalls).where(eq(missedCalls.id, id));
+      if (!call) return res.status(404).json({ error: "Not found" });
+      if (call.userId !== req.userId) return res.status(403).json({ error: "Forbidden" });
+      const baseUrl = getPublicBaseUrl(req);
+      const url = buildVoicemailUrl(baseUrl, id, 10 * 60 * 1000);
+      res.json({ url });
+    } catch (err: any) {
+      console.error("Voicemail link error:", err);
+      res.status(500).json({ error: "Could not generate link" });
+    }
+  });
+
   app.get("/api/voicemail/:id", async (req: Request, res: Response) => {
     try {
       const id = req.params.id as string;
       const [call] = await db.select().from(missedCalls).where(eq(missedCalls.id, id));
-      if (!call?.voicemailData) {
-        return res.status(404).send("Voicemail not found");
+      if (!call) return res.status(404).send("Voicemail not found");
+
+      // Access control: caller must EITHER present a valid signed token (for SMS-link
+      // playback by the tradie's mobile) OR be the authenticated owner of the call.
+      const tokenOk = verifyVoicemailToken(id, String(req.query.t || ""), Number(req.query.exp || 0));
+      let ownerOk = false;
+      if (!tokenOk) {
+        const auth = req.header("authorization");
+        if (auth?.startsWith("Bearer ")) {
+          try {
+            const jwtMod = await import("jsonwebtoken");
+            const decoded = jwtMod.default.verify(
+              auth.slice(7),
+              process.env.JWT_SECRET || "tradiecatch-jwt-secret-change-in-production"
+            ) as { userId?: string };
+            ownerOk = !!decoded.userId && decoded.userId === call.userId;
+          } catch { /* fall through */ }
+        }
       }
-      const buf = Buffer.from(call.voicemailData, "base64");
-      res.set("Content-Type", call.voicemailMimeType || "audio/mpeg");
-      res.set("Content-Length", buf.length.toString());
-      res.set("Cache-Control", "private, max-age=86400");
-      res.send(buf);
+      if (!tokenOk && !ownerOk) {
+        return res.status(403).send("Forbidden");
+      }
+
+      // New path: stream from Twilio
+      if (call.recordingSid) {
+        const [settingsRow] = await db.select().from(settings).where(eq(settings.userId, call.userId));
+        if (!settingsRow) return res.status(404).send("Voicemail not available");
+        const sid = settingsRow.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || "";
+        const token = settingsRow.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN || "";
+        if (!sid || !token) return res.status(503).send("Voicemail backend not configured");
+
+        const recordingUrl = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Recordings/${call.recordingSid}.mp3`;
+        const authHeader = "Basic " + Buffer.from(`${sid}:${token}`).toString("base64");
+        const upstream = await fetch(recordingUrl, { headers: { Authorization: authHeader } });
+        if (!upstream.ok) {
+          console.error(`Twilio recording fetch failed: ${upstream.status}`);
+          return res.status(upstream.status).send("Voicemail unavailable");
+        }
+        res.set("Content-Type", "audio/mpeg");
+        res.set("Cache-Control", "private, no-store");
+        const buf = Buffer.from(await upstream.arrayBuffer());
+        res.set("Content-Length", buf.length.toString());
+        return res.send(buf);
+      }
+
+      // Legacy path: base64 in DB (kept for old calls only)
+      if (call.voicemailData) {
+        const buf = Buffer.from(call.voicemailData, "base64");
+        res.set("Content-Type", call.voicemailMimeType || "audio/mpeg");
+        res.set("Content-Length", buf.length.toString());
+        res.set("Cache-Control", "private, max-age=86400");
+        return res.send(buf);
+      }
+
+      return res.status(404).send("Voicemail not found");
     } catch (err: any) {
       console.error("Serve voicemail error:", err);
       res.status(500).send("Error");
@@ -594,6 +685,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/settings", requireAuth, async (req: AuthRequest, res: Response) => {
+    // Operator-managed credentials: only the admin (operator) account may write
+    // Twilio fields. Tradies who try to PATCH these get 403 — even though the
+    // UI hides the editor, we enforce it server-side too.
+    const TWILIO_FIELDS = ["twilioAccountSid", "twilioAuthToken", "twilioPhoneNumber"] as const;
+    const tryingToWriteTwilio = TWILIO_FIELDS.some(f => f in (req.body || {}));
+    if (tryingToWriteTwilio) {
+      const [me] = await db.select().from(users).where(eq(users.id, req.userId!));
+      if (!me || me.email !== ADMIN_EMAIL) {
+        return res.status(403).json({
+          error: "Twilio credentials are managed by TradieCatch operations. Contact support to change your business number.",
+        });
+      }
+    }
+
     // If a Twilio phone number is being saved, remove it from every other account first
     if (req.body.twilioPhoneNumber && req.body.twilioPhoneNumber.trim()) {
       await db.update(settings)

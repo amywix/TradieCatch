@@ -7,6 +7,8 @@ interface User {
   id: string;
   email: string;
   username: string;
+  mustChangePassword?: boolean;
+  acceptedTermsAt?: string | null;
 }
 
 interface AuthContextValue {
@@ -15,8 +17,8 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -59,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (res.ok) {
               const userData = await res.json();
               setUser(userData);
+              await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
             } else if (res.status === 401 || res.status === 403) {
               // Token is genuinely invalid — clear it.
               setUser(null);
@@ -101,41 +104,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
   }, []);
 
-  const register = useCallback(async (email: string, username: string, password: string) => {
+  const refreshUser = useCallback(async () => {
+    if (!_authToken) return;
     const baseUrl = getApiUrl();
-    const res = await fetch(`${baseUrl}api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, username, password }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || 'Registration failed');
-    }
-
-    const data = await res.json();
-    _authToken = data.token;
-    setToken(data.token);
-    setUser(data.user);
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
-
-    // Record acceptance of Terms of Service & Privacy Policy. The signup form
-    // requires the user to tick the agreement checkbox before they get here,
-    // so this just persists the acceptance to the database. Best-effort: if it
-    // fails (e.g. transient network), we don't block the user from continuing —
-    // they can re-accept later if we ever surface a re-acceptance prompt.
     try {
-      await fetch(`${baseUrl}api/auth/accept-terms`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${data.token}`,
-        },
+      const res = await fetch(`${baseUrl}api/auth/me`, {
+        headers: { Authorization: `Bearer ${_authToken}` },
       });
+      if (res.ok) {
+        const userData = await res.json();
+        setUser(userData);
+        await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
+      }
     } catch (err) {
-      console.log('Terms acceptance recording failed (non-fatal):', err);
+      console.log('refreshUser error:', err);
     }
   }, []);
 
@@ -153,8 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isAuthenticated: !!user && !!token,
       login,
-      register,
       logout,
+      refreshUser,
     }}>
       {children}
     </AuthContext.Provider>

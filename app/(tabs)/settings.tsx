@@ -21,6 +21,7 @@ export default function SettingsScreen() {
   const { settings, updateAppSettings, updateServices, refreshAll } = useData();
   const { isPro, openCustomerPortal } = useSubscription();
   const { user, logout } = useAuth();
+  const isAdmin = user?.email === 'admin@tradiecatch.com';
   const [businessName, setBusinessName] = useState(settings.businessName);
   const [editingName, setEditingName] = useState(false);
   const [editingServiceIdx, setEditingServiceIdx] = useState<number | null>(null);
@@ -1158,65 +1159,88 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Twilio Connection</Text>
-          <View style={styles.card}>
-            <View style={styles.settingRow}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.settingIcon, { backgroundColor: settings.twilioAccountSid ? '#E8F8ED' : '#FFEEEE' }]}>
-                  <Ionicons
-                    name={settings.twilioAccountSid ? 'checkmark-circle' : 'alert-circle-outline'}
-                    size={18}
-                    color={settings.twilioAccountSid ? Colors.success : Colors.danger}
-                  />
+        {isAdmin ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Twilio Connection (Admin)</Text>
+            <View style={styles.card}>
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.settingIcon, { backgroundColor: settings.twilioAccountSid ? '#E8F8ED' : '#FFEEEE' }]}>
+                    <Ionicons
+                      name={settings.twilioAccountSid ? 'checkmark-circle' : 'alert-circle-outline'}
+                      size={18}
+                      color={settings.twilioAccountSid ? Colors.success : Colors.danger}
+                    />
+                  </View>
+                  <View style={styles.settingContent}>
+                    <Text style={styles.settingLabel}>SMS Status</Text>
+                    <Text style={styles.settingValue}>
+                      {settings.twilioAccountSid ? 'Connected' : 'Not configured'}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.settingContent}>
-                  <Text style={styles.settingLabel}>SMS Status</Text>
-                  <Text style={styles.settingValue}>
-                    {settings.twilioAccountSid ? 'Connected' : 'Not configured'}
-                  </Text>
+              </View>
+              <View style={styles.settingDivider} />
+              <Pressable style={styles.twilioDetailsBtn} onPress={openTwilioModal}>
+                <Ionicons name={settings.twilioAccountSid ? 'pencil-outline' : 'add-circle-outline'} size={18} color={Colors.accent} />
+                <Text style={styles.twilioDetailsBtnText}>
+                  {settings.twilioAccountSid ? 'Edit Twilio Details' : 'Add Twilio Details'}
+                </Text>
+              </Pressable>
+              {settings.twilioAccountSid ? (
+                <>
+                  <View style={styles.settingDivider} />
+                  <Pressable
+                    style={[styles.twilioDetailsBtn, twilioTestStatus === 'testing' && { opacity: 0.6 }]}
+                    onPress={handleTestTwilio}
+                    disabled={twilioTestStatus === 'testing'}
+                  >
+                    {twilioTestStatus === 'testing' ? (
+                      <ActivityIndicator size="small" color={Colors.accent} />
+                    ) : (
+                      <Ionicons name="wifi-outline" size={18} color={Colors.accent} />
+                    )}
+                    <Text style={styles.twilioDetailsBtnText}>
+                      {twilioTestStatus === 'testing' ? 'Testing…' : 'Test Connection'}
+                    </Text>
+                  </Pressable>
+                  {twilioTestStatus === 'ok' && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 12 }}>
+                      <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+                      <Text style={{ color: Colors.success, fontSize: 13 }}>{twilioTestMsg}</Text>
+                    </View>
+                  )}
+                  {twilioTestStatus === 'error' && (
+                    <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                      <Text style={{ color: Colors.danger, fontSize: 13 }}>{twilioTestMsg}</Text>
+                    </View>
+                  )}
+                </>
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Your Business Phone Number</Text>
+            <View style={styles.card}>
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.settingIcon, { backgroundColor: '#E8F8ED' }]}>
+                    <Ionicons name="call-outline" size={18} color={Colors.success} />
+                  </View>
+                  <View style={styles.settingContent}>
+                    <Text style={styles.settingLabel}>
+                      {settings.twilioPhoneNumber || 'Not set yet'}
+                    </Text>
+                    <Text style={styles.settingDescription}>
+                      This is your dedicated TradieCatch number. Customers call this number, missed calls get an instant SMS reply, and bookings flow into your Jobs tab. The number is set up and managed for you — no action needed.
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
-            <View style={styles.settingDivider} />
-            <Pressable style={styles.twilioDetailsBtn} onPress={openTwilioModal}>
-              <Ionicons name={settings.twilioAccountSid ? 'pencil-outline' : 'add-circle-outline'} size={18} color={Colors.accent} />
-              <Text style={styles.twilioDetailsBtnText}>
-                {settings.twilioAccountSid ? 'Edit Twilio Details' : 'Add Twilio Details'}
-              </Text>
-            </Pressable>
-            {settings.twilioAccountSid ? (
-              <>
-                <View style={styles.settingDivider} />
-                <Pressable
-                  style={[styles.twilioDetailsBtn, twilioTestStatus === 'testing' && { opacity: 0.6 }]}
-                  onPress={handleTestTwilio}
-                  disabled={twilioTestStatus === 'testing'}
-                >
-                  {twilioTestStatus === 'testing' ? (
-                    <ActivityIndicator size="small" color={Colors.accent} />
-                  ) : (
-                    <Ionicons name="wifi-outline" size={18} color={Colors.accent} />
-                  )}
-                  <Text style={styles.twilioDetailsBtnText}>
-                    {twilioTestStatus === 'testing' ? 'Testing…' : 'Test Connection'}
-                  </Text>
-                </Pressable>
-                {twilioTestStatus === 'ok' && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 12 }}>
-                    <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
-                    <Text style={{ color: Colors.success, fontSize: 13 }}>{twilioTestMsg}</Text>
-                  </View>
-                )}
-                {twilioTestStatus === 'error' && (
-                  <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
-                    <Text style={{ color: Colors.danger, fontSize: 13 }}>{twilioTestMsg}</Text>
-                  </View>
-                )}
-              </>
-            ) : null}
           </View>
-        </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Voicemail Greeting</Text>
@@ -1342,8 +1366,9 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {isAdmin && (<>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Webhook Setup Guide</Text>
+          <Text style={styles.sectionTitle}>Webhook Setup Guide (Admin)</Text>
           <View style={styles.card}>
             <View style={styles.webhookIntro}>
               <Ionicons name="information-circle" size={20} color={Colors.primaryLight} />
@@ -1474,6 +1499,7 @@ export default function SettingsScreen() {
             </View>
           </View>
         </View>
+        </>)}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Booking Calendar</Text>
@@ -1858,6 +1884,19 @@ export default function SettingsScreen() {
                 </View>
               </View>
             </View>
+            {isAdmin && (
+              <>
+                <View style={styles.aboutDivider} />
+                <Pressable
+                  style={styles.logoutRow}
+                  onPress={() => router.push('/admin-create-tradie')}
+                  testID="admin-create-tradie-btn"
+                >
+                  <Ionicons name="person-add-outline" size={20} color={Colors.accent} />
+                  <Text style={[styles.logoutText, { color: Colors.accent }]}>Create Tradie Account</Text>
+                </Pressable>
+              </>
+            )}
             <View style={styles.aboutDivider} />
             <Pressable
               style={styles.logoutRow}

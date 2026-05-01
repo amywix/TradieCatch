@@ -35,16 +35,16 @@ export default function TermsOfServiceScreen() {
 
         <Section title="2. Description of the Service">
           TradieCatch is a software-as-a-service platform that helps tradespeople manage missed
-          calls, automate SMS follow-ups with their customers, and book jobs. The Service connects
-          to a Twilio phone number that you supply and uses your Twilio credentials to send and
-          receive SMS messages on your behalf.
+          calls, automate SMS follow-ups with their customers, and book jobs. We provision and
+          manage a dedicated business phone number for you and run the SMS and voice automation on
+          your behalf — there is nothing for you to plug in or configure on the telephony side.
         </Section>
 
         <Section title="3. Your Account">
-          You are responsible for maintaining the confidentiality of your account credentials and
-          for all activity that occurs under your account. You must provide accurate, current, and
-          complete information during registration and keep it up to date. You agree to notify us
-          immediately of any unauthorised use of your account.
+          Your account is created for you by TradieCatch after you arrange a subscription with us. You will be issued a
+          temporary password and prompted to change it on your first login. You are responsible for
+          keeping your new password confidential and for all activity that occurs under your
+          account. You agree to notify us immediately of any unauthorised use of your account.
         </Section>
 
         <Section title="4. Subscription, Billing & Cancellation">
@@ -75,11 +75,26 @@ export default function TermsOfServiceScreen() {
           </BulletItem>
         </Section>
 
-        <Section title="5. Twilio Costs Are Separate">
-          TradieCatch does not include Twilio fees. You are solely responsible for all charges
-          billed by Twilio for your phone number, voice calls, SMS messages, and any other Twilio
-          services you use. You must keep your Twilio account active and funded for the Service to
-          work correctly.
+        <Section title="5. What Your Subscription Includes">
+          <BulletItem title="Dedicated business phone number">
+            Your subscription includes a dedicated Australian phone number that we provision and
+            run for you. You do not need a separate Twilio account.
+          </BulletItem>
+          <BulletItem title="SMS and voice usage (fair use)">
+            Your subscription includes a fair-use allowance of up to 1,000 outbound and inbound SMS
+            messages per month and 500 voice minutes per month combined across calls and
+            voicemail. This allowance covers normal sole-trader and small-team electrician usage.
+          </BulletItem>
+          <BulletItem title="If you go over the fair-use cap">
+            If your usage consistently exceeds the fair-use cap, we may contact you to discuss a
+            higher tier or a usage-based add-on. We will not silently bill you extra — we'll always
+            talk to you first before changing your plan.
+          </BulletItem>
+          <BulletItem title="No telephony bill from us">
+            Outside of your TradieCatch subscription, you will not receive a separate bill from us
+            or from Twilio for normal usage within the cap. Any extra usage charges (if you opt
+            into a higher tier) will be invoiced through TradieCatch only.
+          </BulletItem>
         </Section>
 
         <Section title="6. Your Use of the Service">

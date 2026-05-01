@@ -19,7 +19,7 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const TERMS_VERSION = "2026-04-30";
+export const TERMS_VERSION = "2026-05-01";
 
 export const missedCalls = pgTable("missed_calls", {
   id: varchar("id")
@@ -43,6 +43,7 @@ export const missedCalls = pgTable("missed_calls", {
   voicemailData: text("voicemail_data"),
   voicemailMimeType: text("voicemail_mime_type"),
   voicemailDurationSeconds: text("voicemail_duration_seconds"),
+  recordingSid: text("recording_sid"),
 });
 
 export const jobs = pgTable("jobs", {

@@ -21,6 +21,7 @@ export interface MissedCall {
   voicemailData?: string | null;
   voicemailDurationSeconds?: string | null;
   voicemailMimeType?: string | null;
+  recordingSid?: string | null;
 }
 
 export interface Job {

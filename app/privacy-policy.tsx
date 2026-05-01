@@ -34,8 +34,7 @@ export default function PrivacyPolicyScreen() {
 
         <Section title="Information We Collect">
           <BulletItem title="Account information">
-            Your name, email address, and password when you register. Passwords are stored using
-            industry-standard bcrypt hashing and are never stored in plain text.
+            Your name, email address, and a temporary password are set up by us when we create your account. You change the password on your first login. Passwords are stored using industry-standard bcrypt hashing and are never stored in plain text.
           </BulletItem>
           <BulletItem title="Business information">
             Your business name and the services you offer, which you provide in the Settings screen.
@@ -44,9 +43,15 @@ export default function PrivacyPolicyScreen() {
             Missed call records including caller phone numbers, names, job addresses, email addresses,
             service types, and appointment details collected via the automated SMS conversation.
           </BulletItem>
-          <BulletItem title="Twilio credentials">
-            Your Twilio Account SID, Auth Token, and phone number, stored securely in our database to
-            send and receive SMS messages on your behalf.
+          <BulletItem title="Your dedicated business phone number">
+            TradieCatch provisions and operates a Twilio account on your behalf. Your dedicated
+            business phone number is provisioned, paid for, and managed by us — you do not need
+            your own Twilio account and we do not store any Twilio credentials on your behalf.
+          </BulletItem>
+          <BulletItem title="Voicemail recordings">
+            Voicemails left by your callers are stored on Twilio's infrastructure. We do not retain
+            audio data on TradieCatch servers. When you tap a voicemail link in the app, the audio
+            is streamed to you on demand from Twilio.
           </BulletItem>
           <BulletItem title="Billing information">
             Subscription and payment data is handled by Stripe. We store your Stripe Customer ID and
@@ -56,13 +61,14 @@ export default function PrivacyPolicyScreen() {
 
         <Section title="How We Use Your Information">
           <BulletItem title="Automated SMS conversations">
-            When a caller texts your Twilio number, we use the conversation state machine to guide them
+            When a caller texts your dedicated business number, we use the conversation state machine to guide them
             through booking a job. Caller data (name, address, service, time preference) is stored in
             your account as a missed call record and converted into a job when booking completes.
           </BulletItem>
-          <BulletItem title="SMS sending">
-            We use your Twilio credentials to send automated replies to callers on your behalf. We do
-            not use your Twilio account for any other purpose.
+          <BulletItem title="SMS and voice sending">
+            We use the Twilio account that we operate on your behalf to send automated SMS replies
+            and play your voicemail greeting to callers. The dedicated business number is used only
+            for your TradieCatch account.
           </BulletItem>
           <BulletItem title="Job management">
             Call and job records are used to populate your Calls and Jobs tabs within the app.
