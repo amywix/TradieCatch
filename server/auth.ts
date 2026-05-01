@@ -276,7 +276,7 @@ export async function requireAuth(
   next();
 }
 
-export const ADMIN_EMAIL = "admin@tradiecatch.com";
+export const ADMIN_EMAIL = "demo";
 
 /**
  * Operator-only middleware. Run AFTER requireAuth. Confirms the authenticated

@@ -827,7 +827,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.userId!;
       const [user] = await db.select().from(users).where(eq(users.id, userId));
 
-      if (user?.email === 'admin@tradiecatch.com') {
+      if (user?.email === ADMIN_EMAIL) {
         return res.json({
           active: true,
           subscription: {

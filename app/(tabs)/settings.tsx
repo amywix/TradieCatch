@@ -21,7 +21,7 @@ export default function SettingsScreen() {
   const { settings, updateAppSettings, updateServices, refreshAll } = useData();
   const { isPro, openCustomerPortal } = useSubscription();
   const { user, logout } = useAuth();
-  const isAdmin = user?.email === 'admin@tradiecatch.com';
+  const isAdmin = user?.email === 'demo';
   const [businessName, setBusinessName] = useState(settings.businessName);
   const [editingName, setEditingName] = useState(false);
   const [editingServiceIdx, setEditingServiceIdx] = useState<number | null>(null);

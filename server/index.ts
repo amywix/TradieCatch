@@ -311,16 +311,16 @@ async function bootstrapDefaultUser() {
       log('Bootstrap: Users exist but Twilio number not matched to any');
 
       // Operator account never has the forced password-change gate
-      const adminUser = allUsers.find(u => u.email === 'admin@tradiecatch.com');
+      const adminUser = allUsers.find(u => u.email === 'demo');
       if (adminUser && adminUser.mustChangePassword !== false) {
         await db.update(users).set({ mustChangePassword: false }).where(eq(users.id, adminUser.id));
-        log('Bootstrap: cleared mustChangePassword on admin@tradiecatch.com');
+        log('Bootstrap: cleared mustChangePassword on demo');
       }
 
       // One-shot admin password reset (remove ADMIN_PASSWORD_RESET env var after use)
       const resetPwd = process.env.ADMIN_PASSWORD_RESET;
       if (resetPwd) {
-        const adminToReset = allUsers.find(u => u.email === 'admin@tradiecatch.com');
+        const adminToReset = allUsers.find(u => u.email === 'demo');
         if (adminToReset) {
           const newHash = await bcrypt.hash(resetPwd, 12);
           await db.update(users).set({ password: newHash }).where(eq(users.id, adminToReset.id));
@@ -331,9 +331,9 @@ async function bootstrapDefaultUser() {
     }
 
     log('Bootstrap: No users found, creating default account...');
-    const hashedPassword = await bcrypt.hash('test123456', 12);
+    const hashedPassword = await bcrypt.hash('123', 12);
     const [user] = await db.insert(users).values({
-      email: 'admin@tradiecatch.com',
+      email: 'demo',
       username: 'TradieCatch Admin',
       password: hashedPassword,
       mustChangePassword: false,
@@ -359,7 +359,7 @@ async function bootstrapDefaultUser() {
       isDefault: true,
     });
 
-    log(`Bootstrap: Created default user (admin@tradiecatch.com) with Twilio number ${twilioPhone}`);
+    log(`Bootstrap: Created default user (demo) with Twilio number ${twilioPhone}`);
   } catch (err) {
     console.error('Bootstrap error:', err);
   }
