@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import { db } from "./db";
 import { sql as rawSql } from "drizzle-orm";
-import { missedCalls, jobs, settings, smsTemplates, users, DEFAULT_SERVICES } from "@shared/schema";
+import { missedCalls, jobs, settings, users, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, desc, and, not, SQL } from "drizzle-orm";
 import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
 import { createTradie, login, getMe, changePassword, acceptTerms, requireAuth, requireAdmin, ADMIN_EMAIL, type AuthRequest } from "./auth";
@@ -404,6 +404,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Recording callback: missedCallId=${missedCallId}, recordingSid=${recordingSid}, duration=${recordingDuration}s`);
       if (!missedCallId || !recordingSid) return;
 
+      // Skip empty/silent recordings (caller pressed 1 then immediately hung up,
+      // or the line was silent). Anything under 2 seconds is treated as no message.
+      const durationSec = parseInt(String(recordingDuration), 10) || 0;
+      if (durationSec < 2) {
+        console.log(`Recording callback: skipping empty recording (${durationSec}s) for ${missedCallId}`);
+        return;
+      }
+
       const [call] = await db.select().from(missedCalls).where(eq(missedCalls.id, missedCallId));
       if (!call) { console.log("Recording callback: missed call not found"); return; }
 
@@ -437,6 +445,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err) {
       console.error("Recording callback error:", err);
     }
+  });
+
+  // IVR result: caller pressed a key (or didn't) on the "press 1 for voicemail"
+  // prompt. If they pressed 1, start recording. Anything else → hang up cleanly,
+  // so nothing is recorded and the tradie isn't sent an empty voicemail SMS.
+  app.post("/api/twilio/voicemail-choice", async (req: Request, res: Response) => {
+    res.set("Content-Type", "text/xml");
+    const digits = (req.body.Digits || "").trim();
+    const missedCallId = (req.query.missedCallId as string) || "";
+    console.log(`Voicemail choice: digits=${digits || "(none)"} for missedCallId=${missedCallId}`);
+    if (digits !== "1" || !missedCallId) {
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
+      return;
+    }
+    const baseUrl = getPublicBaseUrl(req);
+    const recCb = `${baseUrl}/api/twilio/recording-callback?missedCallId=${encodeURIComponent(missedCallId)}`;
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Olivia-Neural">Please leave your message after the tone, then hang up.</Say>
+  <Record action="${recCb}" method="POST" recordingStatusCallback="${recCb}" recordingStatusCallbackMethod="POST" maxLength="120" timeout="5" playBeep="true" finishOnKey="#" trim="trim-silence"/>
+  <Say voice="Polly.Olivia-Neural">No message recorded. Goodbye.</Say>
+  <Hangup/>
+</Response>`);
   });
 
   // Public endpoint: streams a voicemail recording. New recordings live at
@@ -776,48 +807,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/templates", requireAuth, async (req: AuthRequest, res: Response) => {
-    const rows = await db.select().from(smsTemplates).where(eq(smsTemplates.userId, req.userId!));
-    res.json(rows);
-  });
-
-  app.post("/api/templates", requireAuth, async (req: AuthRequest, res: Response) => {
-    const [template] = await db.insert(smsTemplates).values({
-      userId: req.userId!,
-      name: req.body.name,
-      message: req.body.message,
-      isDefault: req.body.isDefault || false,
-    }).returning();
-    res.json(template);
-  });
-
-  app.patch("/api/templates/:id", requireAuth, async (req: AuthRequest, res: Response) => {
-    const id = paramId(req);
-    const [template] = await db.update(smsTemplates).set(req.body).where(
-      and(eq(smsTemplates.id, id), eq(smsTemplates.userId, req.userId!))
-    ).returning();
-    res.json(template);
-  });
-
-  app.delete("/api/templates/:id", requireAuth, async (req: AuthRequest, res: Response) => {
-    const id = paramId(req);
-    await db.delete(smsTemplates).where(
-      and(eq(smsTemplates.id, id), eq(smsTemplates.userId, req.userId!))
-    );
-    res.json({ ok: true });
-  });
-
-  app.post("/api/templates/:id/set-default", requireAuth, async (req: AuthRequest, res: Response) => {
-    const id = paramId(req);
-    await db.update(smsTemplates).set({ isDefault: false }).where(
-      and(eq(smsTemplates.isDefault, true), eq(smsTemplates.userId, req.userId!))
-    );
-    const [template] = await db.update(smsTemplates).set({ isDefault: true }).where(
-      and(eq(smsTemplates.id, id), eq(smsTemplates.userId, req.userId!))
-    ).returning();
-    res.json(template);
-  });
-
   // Note: in-app Stripe checkout has been removed. Subscriptions are now created
   // manually outside the app (e.g. via a Stripe payment link sent to the tradie's
   // email). The /api/stripe/subscription-status endpoint auto-links by email.
@@ -1029,12 +1018,16 @@ async function handleMissedCallAndRespond(
     : `<Say voice="Polly.Olivia-Neural">${voiceMessage} Thanks for calling ${businessName}.</Say>`;
 
   if (voicemailEnabled && missedCallId) {
-    const recCb = `${baseUrl}/api/twilio/recording-callback?missedCallId=${encodeURIComponent(missedCallId)}`;
+    // IVR: caller hears the greeting, then is prompted to press 1 if they
+    // want to leave a voicemail. If they don't press anything, the Gather
+    // times out and we just hang up — no empty/silent voicemail recorded.
+    const choiceUrl = `${baseUrl}/api/twilio/voicemail-choice?missedCallId=${encodeURIComponent(missedCallId)}`;
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   ${greetingTwiml}
-  <Record action="${recCb}" method="POST" recordingStatusCallback="${recCb}" recordingStatusCallbackMethod="POST" maxLength="120" timeout="5" playBeep="true" finishOnKey="#" trim="trim-silence"/>
-  <Say voice="Polly.Olivia-Neural">No message recorded. Goodbye.</Say>
+  <Gather numDigits="1" timeout="6" action="${choiceUrl}" method="POST">
+    <Say voice="Polly.Olivia-Neural">To leave a voicemail, press 1. Otherwise, just hang up and we'll text you shortly.</Say>
+  </Gather>
   <Hangup/>
 </Response>`);
   } else {

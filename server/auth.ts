@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { db } from "./db";
-import { users, settings, smsTemplates, DEFAULT_SERVICES, TERMS_VERSION } from "@shared/schema";
+import { users, settings, DEFAULT_SERVICES, TERMS_VERSION } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 const JWT_SECRET = process.env.JWT_SECRET || "tradiecatch-jwt-secret-change-in-production";
@@ -95,13 +95,6 @@ export async function createTradie(req: AuthRequest, res: Response) {
       baseLat,
       baseLng,
       serviceRadiusKm: typeof serviceRadiusKm === "number" && serviceRadiusKm > 0 ? Math.floor(serviceRadiusKm) : 30,
-    });
-
-    await db.insert(smsTemplates).values({
-      userId: user.id,
-      name: "Missed Call Auto-Reply",
-      message: "Hi! Sorry we missed your call. We'll get back to you shortly.",
-      isDefault: true,
     });
 
     res.json({

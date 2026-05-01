@@ -65,16 +65,6 @@ export const jobs = pgTable("jobs", {
   isUrgent: boolean("is_urgent").default(false),
 });
 
-export const smsTemplates = pgTable("sms_templates", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  name: text("name").notNull(),
-  message: text("message").notNull(),
-  isDefault: boolean("is_default").default(false).notNull(),
-});
-
 export const DEFAULT_SERVICES = [
   "Power point install / repair",
   "Ceiling fan install",
@@ -139,5 +129,4 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type MissedCall = typeof missedCalls.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
-export type SmsTemplate = typeof smsTemplates.$inferSelect;
 export type Settings = typeof settings.$inferSelect;

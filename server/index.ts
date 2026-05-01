@@ -5,7 +5,7 @@ import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
 import { WebhookHandlers } from './webhookHandlers';
 import { db } from './db';
-import { users, settings, smsTemplates, missedCalls, jobs, DEFAULT_SERVICES } from '@shared/schema';
+import { users, settings, missedCalls, jobs, DEFAULT_SERVICES } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import * as fs from "fs";
@@ -269,7 +269,6 @@ async function bootstrapDefaultUser() {
       const demoId = demoToDelete[0].id;
       await db.delete(missedCalls).where(eq(missedCalls.userId, demoId));
       await db.delete(jobs).where(eq(jobs.userId, demoId));
-      await db.delete(smsTemplates).where(eq(smsTemplates.userId, demoId));
       await db.delete(settings).where(eq(settings.userId, demoId));
       await db.delete(users).where(eq(users.id, demoId));
       log('Bootstrap: deleted demo@tradiecatch.com account and all associated data');
@@ -350,13 +349,6 @@ async function bootstrapDefaultUser() {
       twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
       twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
       twilioPhoneNumber: twilioPhone,
-    });
-
-    await db.insert(smsTemplates).values({
-      userId: user.id,
-      name: 'Missed Call Auto-Reply',
-      message: "Hi! Sorry we missed your call. We'll get back to you shortly.",
-      isDefault: true,
     });
 
     log(`Bootstrap: Created default user (demo) with Twilio number ${twilioPhone}`);
