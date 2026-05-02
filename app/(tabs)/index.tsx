@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { apiRequest, getApiUrl } from '@/lib/query-client';
 import { useData, MissedCall } from '@/lib/data-context';
+import { useAuth } from '@/lib/auth-context';
 import { formatTimeAgo, formatTime, getInitials, getAvatarColor, confirmAction } from '@/lib/helpers';
 
 const STATE_LABELS: Record<string, string> = {
