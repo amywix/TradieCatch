@@ -18,11 +18,10 @@ _Last updated: May 2026_
 10. [The Settings Tab](#10-the-settings-tab)
 11. [Managing Your Services](#11-managing-your-services)
 12. [Booking Calendar Options](#12-booking-calendar-options)
-13. [Voice Greeting Setup](#13-voice-greeting-setup)
-14. [SMS Templates](#14-sms-templates)
-15. [Subscription & Billing](#15-subscription--billing)
-16. [Using TradieCatch on the Web](#16-using-tradiecatch-on-the-web)
-17. [Frequently Asked Questions](#17-frequently-asked-questions)
+13. [Voice Greeting & Voicemail](#13-voice-greeting--voicemail)
+14. [Subscription & Billing](#14-subscription--billing)
+15. [Using TradieCatch on the Web](#15-using-tradiecatch-on-the-web)
+16. [Frequently Asked Questions](#16-frequently-asked-questions)
 
 ---
 
@@ -33,7 +32,7 @@ TradieCatch is an app for tradespeople (electricians, plumbers, etc.) that autom
 **Here's what happens when someone calls and you can't answer:**
 
 1. Your dedicated TradieCatch business number picks up and plays your greeting
-2. The caller can leave a voicemail (optional) — it's stored on the phone-system side and streamed to you on demand when you tap it in the app, so nothing audio sits on our servers
+2. The caller is offered a choice — "press 1 to leave a voicemail, otherwise just hang up and we'll text you shortly". Voicemail is opt-in: anyone who doesn't press 1 is hung up on without recording. If they do press 1, the recording lives on the phone-system side and is streamed to you on demand when you tap the link in the app, so nothing audio sits on our servers
 3. TradieCatch instantly sends them an SMS to follow up
 4. An automated conversation gathers their name, the job, the address, their email, and a preferred time
 5. If the address is inside your travel area, the bot books the job and you get notified
@@ -60,7 +59,7 @@ Your login is saved — you won't need to sign in again each time you open the a
 
 ### What Happens Next
 
-Once your password is set, the app checks your subscription. If it isn't active yet, you'll land on the paywall screen — see [Subscription & Billing](#15-subscription--billing).
+Once your password is set, the app checks your subscription. If it isn't active yet, you'll land on the paywall screen — see [Subscription & Billing](#14-subscription--billing).
 
 Once your subscription is active, the app drops you straight into the **Calls** tab. There's no setup wizard to sit through — your phone number, business name, service area and services list have all been configured for you in advance.
 
@@ -160,6 +159,10 @@ If someone called your personal number instead of your TradieCatch business numb
 2. Enter the caller's name and phone number
 3. Tap **Add Call**
 4. Then tap **Send SMS** to start the automated conversation
+
+### Signing Out
+
+Tap the small log-out icon at the top right of the Calls header (just to the right of the **+** button). You'll get a confirm dialog before being signed out and returned to the login screen. The same log-out icon is also on the Jobs header for convenience.
 
 ---
 
@@ -293,14 +296,10 @@ Choose how the bot offers time slots — manual, Calendly, or Google Calendar.
 
 The list of services the bot offers callers — fully editable.
 
-### SMS Templates
-
-Pre-written messages you can send manually from a chat.
-
 ### Account
 
 - Change password
-- Sign out
+- Sign out (you can also sign out without coming here — just tap the log-out icon at the top right of the Calls or Jobs header)
 
 ### About
 
@@ -371,11 +370,15 @@ The bot sends a pre-filled Google Calendar link.
 
 ---
 
-## 13. Voice Greeting Setup
+## 13. Voice Greeting & Voicemail
 
-When someone calls your TradieCatch business number, they hear a greeting before voicemail (if voicemail is on). Voicemail recordings stay on the phone-system side — when you tap a voicemail link in the Calls tab the audio is streamed to you on demand, so nothing audio is stored on TradieCatch's servers.
+When someone calls your TradieCatch business number, they hear a greeting first, followed by a short prompt: _"To leave a voicemail, press 1. Otherwise, just hang up and we'll text you shortly."_
 
-### Option A: Text-to-Speech (Default)
+- If they **press 1**, they're recorded and the recording stays on the phone-system side. When you tap the voicemail link in the Calls tab, the audio is streamed to you on demand — nothing audio is stored on TradieCatch's servers.
+- If they **don't press 1** (or just hang up), no voicemail is recorded. The SMS bot still kicks in and follows up with them.
+- Anything under 2 seconds (silent recordings, accidental presses) is dropped — you won't get a notification for empty voicemails.
+
+### Option A: Text-to-Speech Greeting (Default)
 
 The app speaks your written message using an automated voice.
 
@@ -386,7 +389,7 @@ The app speaks your written message using an automated voice.
 Default message:
 > "Sorry we missed your call. We will SMS you now to follow up."
 
-### Option B: Record Your Own Voice
+### Option B: Record Your Own Greeting
 
 1. Settings → Voice Greeting
 2. Tap **Record Greeting**
@@ -396,29 +399,13 @@ Default message:
 
 > Your recorded greeting replaces the text-to-speech. To go back to text-to-speech, delete the recording.
 
----
+### Listening to a Voicemail
 
-## 14. SMS Templates
-
-Pre-written messages you can send manually from a chat in the Calls tab.
-
-### Creating a Template
-
-1. Settings → SMS Templates → **Add Template**
-2. Give it a name (e.g., "Running Late")
-3. Write the message
-4. Save
-
-### Using a Template
-
-1. Calls tab → tap **View Chat** on a missed call
-2. Tap the template icon in the message composer
-3. Choose a template — it fills the message field
-4. Edit if needed, then send
+When a caller has left a voicemail, the missed call card in the Calls tab shows a **Play voicemail** button. Tap it — the audio is fetched from the phone-system side just for you and opens in your phone's audio player. There's also a link in the SMS notification you receive.
 
 ---
 
-## 15. Subscription & Billing
+## 14. Subscription & Billing
 
 TradieCatch uses Stripe for secure payment processing. The flow is intentionally simple:
 
@@ -450,7 +437,7 @@ There's no "pause" — only cancel. If you cancel, you keep access until the per
 
 ---
 
-## 16. Using TradieCatch on the Web
+## 15. Using TradieCatch on the Web
 
 You don't need to download anything from an app store to get started. TradieCatch runs in any modern browser:
 
@@ -462,7 +449,7 @@ This means you can be up and running immediately without waiting for App Store a
 
 ---
 
-## 17. Frequently Asked Questions
+## 16. Frequently Asked Questions
 
 **Q: Do customers know they're talking to a bot?**
 A: The messages are written to sound natural. Most customers simply reply and get booked in without giving it a second thought. If you want to be transparent you can edit the greeting in Settings to mention it's an automated reply.
