@@ -274,84 +274,119 @@ async function bootstrapDefaultUser() {
       log('Bootstrap: deleted demo@tradiecatch.com account and all associated data');
     }
 
-    const allUsers = await db.select().from(users);
-    if (allUsers.length > 0) {
-      const allSettings = await db.select().from(settings);
-      const firstUser = allUsers[0];
-      const userSettings = allSettings.find(s => s.userId === firstUser.id);
-
-      if (userSettings && !userSettings.bookingCalendarEnabled) {
-        await db.update(settings)
-          .set({
-            bookingCalendarEnabled: true,
-            bookingSlots: userSettings.bookingSlots || ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
-          })
-          .where(eq(settings.userId, firstUser.id));
-        log(`Bootstrap: Enabled booking calendar for user ${firstUser.email}`);
-      }
-
-      const hasMatchingNumber = allSettings.some(s => s.twilioPhoneNumber === twilioPhone);
-      if (hasMatchingNumber) {
-        log(`Bootstrap: Twilio number ${twilioPhone} already configured`);
-        return;
-      }
-
-      if (userSettings && !userSettings.twilioPhoneNumber) {
-        await db.update(settings)
-          .set({
-            twilioPhoneNumber: twilioPhone,
-            twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
-            twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
-            businessName: userSettings.businessName || 'TradieCatch',
-          })
-          .where(eq(settings.userId, firstUser.id));
-        log(`Bootstrap: Updated user ${firstUser.email} with Twilio number ${twilioPhone}`);
-      }
-      log('Bootstrap: Users exist but Twilio number not matched to any');
-
-      // Operator account never has the forced password-change gate
-      const adminUser = allUsers.find(u => u.email === 'demo');
-      if (adminUser && adminUser.mustChangePassword !== false) {
-        await db.update(users).set({ mustChangePassword: false }).where(eq(users.id, adminUser.id));
-        log('Bootstrap: cleared mustChangePassword on demo');
-      }
-
-      // One-shot admin password reset (remove ADMIN_PASSWORD_RESET env var after use)
-      const resetPwd = process.env.ADMIN_PASSWORD_RESET;
-      if (resetPwd) {
-        const adminToReset = allUsers.find(u => u.email === 'demo');
-        if (adminToReset) {
-          const newHash = await bcrypt.hash(resetPwd, 12);
-          await db.update(users).set({ password: newHash }).where(eq(users.id, adminToReset.id));
-          log(`Bootstrap: admin password was reset via ADMIN_PASSWORD_RESET env var`);
-        }
-      }
-      return;
+    // One-shot rename: if a legacy 'demo' user exists that was actually being
+    // used as the admin account (training period), rename it back to
+    // admin@tradiecatch.com so the operator's data is preserved. The brand-new
+    // demo account (read-only, for showing the guys) is created fresh below.
+    const legacyDemo = await db.select().from(users).where(eq(users.email, 'demo'));
+    const adminAlready = await db.select().from(users).where(eq(users.email, 'admin@tradiecatch.com'));
+    if (legacyDemo.length > 0 && adminAlready.length === 0) {
+      await db.update(users).set({ email: 'admin@tradiecatch.com' }).where(eq(users.id, legacyDemo[0].id));
+      log("Bootstrap: renamed legacy 'demo' user back to admin@tradiecatch.com");
     }
 
-    log('Bootstrap: No users found, creating default account...');
-    const hashedPassword = await bcrypt.hash('123', 12);
-    const [user] = await db.insert(users).values({
-      email: 'demo',
-      username: 'TradieCatch Admin',
-      password: hashedPassword,
-      mustChangePassword: false,
-      acceptedTermsAt: new Date(),
-    }).returning();
+    // Ensure the admin account exists (creating it if this is a fresh DB) and
+    // that its password is set to the env-configurable value (or 'admin123' by
+    // default). On startup we always reset it so the operator can recover access
+    // by editing the env var.
+    let admin = (await db.select().from(users).where(eq(users.email, 'admin@tradiecatch.com')))[0];
+    const adminPwd = process.env.ADMIN_PASSWORD || 'admin123';
+    if (!admin) {
+      const hash = await bcrypt.hash(adminPwd, 12);
+      [admin] = await db.insert(users).values({
+        email: 'admin@tradiecatch.com',
+        username: 'TradieCatch Admin',
+        password: hash,
+        mustChangePassword: false,
+        acceptedTermsAt: new Date(),
+      }).returning();
+      log('Bootstrap: created admin@tradiecatch.com');
+    } else {
+      const newHash = await bcrypt.hash(adminPwd, 12);
+      await db.update(users).set({ password: newHash, mustChangePassword: false }).where(eq(users.id, admin.id));
+      log('Bootstrap: admin@tradiecatch.com password reset');
+    }
 
-    await db.insert(settings).values({
-      userId: user.id,
-      businessName: 'TradieCatch',
-      autoReplyEnabled: true,
-      bookingCalendarEnabled: true,
-      bookingSlots: ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
-      services: DEFAULT_SERVICES,
-      twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
-      twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
-      twilioPhoneNumber: twilioPhone,
-    });
+    // Make sure the admin has a settings row with the operator's Twilio number.
+    let adminSettings = (await db.select().from(settings).where(eq(settings.userId, admin.id)))[0];
+    if (!adminSettings) {
+      [adminSettings] = await db.insert(settings).values({
+        userId: admin.id,
+        businessName: 'TradieCatch',
+        autoReplyEnabled: true,
+        bookingCalendarEnabled: true,
+        bookingSlots: ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
+        services: DEFAULT_SERVICES,
+        twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
+        twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
+        twilioPhoneNumber: twilioPhone,
+      }).returning();
+      log('Bootstrap: created admin settings row');
+    } else if (!adminSettings.twilioPhoneNumber) {
+      await db.update(settings).set({
+        twilioPhoneNumber: twilioPhone,
+        twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
+        twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
+      }).where(eq(settings.userId, admin.id));
+      adminSettings = (await db.select().from(settings).where(eq(settings.userId, admin.id)))[0];
+      log('Bootstrap: backfilled Twilio details on admin settings');
+    }
 
-    log(`Bootstrap: Created default user (demo) with Twilio number ${twilioPhone}`);
+    // Ensure the demo account exists. It mirrors the admin's settings (so the
+    // guys see a populated app) but is read-only — server-side blockDemo
+    // middleware refuses any state-changing call, and the Settings tab is
+    // hidden in the UI.
+    let demo = (await db.select().from(users).where(eq(users.email, 'demo')))[0];
+    const demoPwd = process.env.DEMO_PASSWORD || '123';
+    if (!demo) {
+      const hash = await bcrypt.hash(demoPwd, 12);
+      [demo] = await db.insert(users).values({
+        email: 'demo',
+        username: 'TradieCatch Demo',
+        password: hash,
+        mustChangePassword: false,
+        acceptedTermsAt: new Date(),
+      }).returning();
+      log('Bootstrap: created demo user');
+    } else {
+      const newHash = await bcrypt.hash(demoPwd, 12);
+      await db.update(users).set({ password: newHash, mustChangePassword: false }).where(eq(users.id, demo.id));
+    }
+
+    // Mirror admin's settings into the demo account so the demo screens look
+    // populated and realistic. We refresh on every startup so the demo always
+    // reflects the live config.
+    const existingDemoSettings = (await db.select().from(settings).where(eq(settings.userId, demo.id)))[0];
+    const mirroredFields = {
+      businessName: adminSettings?.businessName ?? 'TradieCatch',
+      autoReplyEnabled: adminSettings?.autoReplyEnabled ?? true,
+      bookingCalendarEnabled: adminSettings?.bookingCalendarEnabled ?? true,
+      bookingSlots: adminSettings?.bookingSlots ?? ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"],
+      services: adminSettings?.services ?? DEFAULT_SERVICES,
+      // SECURITY: never mirror real Twilio credentials into the demo account.
+      // The demo password (`demo`/`123`) is intentionally well-known so anyone
+      // can poke around; copying the operator's SID + auth token in here would
+      // hand those creds to anyone who logs in as demo. The phone number is
+      // safe to mirror (it's already public on outbound SMS) so the demo
+      // Settings page can still display "Your business phone number".
+      twilioAccountSid: '',
+      twilioAuthToken: '',
+      twilioPhoneNumber: adminSettings?.twilioPhoneNumber ?? twilioPhone,
+      missedCallVoiceMessage: adminSettings?.missedCallVoiceMessage ?? null,
+      voiceRecordingData: adminSettings?.voiceRecordingData ?? null,
+      voiceRecordingMimeType: adminSettings?.voiceRecordingMimeType ?? null,
+      baseAddress: adminSettings?.baseAddress ?? null,
+      baseLat: adminSettings?.baseLat ?? null,
+      baseLng: adminSettings?.baseLng ?? null,
+      serviceRadiusKm: adminSettings?.serviceRadiusKm ?? 30,
+    };
+    if (!existingDemoSettings) {
+      await db.insert(settings).values({ userId: demo.id, ...mirroredFields });
+      log('Bootstrap: created demo settings (mirrored from admin)');
+    } else {
+      await db.update(settings).set(mirroredFields).where(eq(settings.userId, demo.id));
+      log('Bootstrap: refreshed demo settings to mirror admin');
+    }
   } catch (err) {
     console.error('Bootstrap error:', err);
   }

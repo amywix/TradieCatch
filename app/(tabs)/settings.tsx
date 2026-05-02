@@ -21,7 +21,17 @@ export default function SettingsScreen() {
   const { settings, updateAppSettings, updateServices, refreshAll } = useData();
   const { isPro, openCustomerPortal } = useSubscription();
   const { user, logout } = useAuth();
-  const isAdmin = user?.email === 'demo';
+  const isAdmin = user?.email === 'admin@tradiecatch.com';
+  const isDemo = user?.email === 'demo';
+
+  // Defensive: the Settings tab is hidden for the demo account in
+  // app/(tabs)/_layout.tsx, but if a demo user somehow lands here via a deep
+  // link, bounce them straight back to the Calls tab.
+  useEffect(() => {
+    if (isDemo) {
+      router.replace('/(tabs)');
+    }
+  }, [isDemo]);
   const [businessName, setBusinessName] = useState(settings.businessName);
   const [editingName, setEditingName] = useState(false);
   const [editingServiceIdx, setEditingServiceIdx] = useState<number | null>(null);

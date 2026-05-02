@@ -33,7 +33,7 @@ export default function AdminCreateTradieScreen() {
   const insets = useSafeAreaInsets();
   const { user, token } = useAuth();
 
-  const isAdmin = user?.email === 'demo';
+  const isAdmin = user?.email === 'admin@tradiecatch.com';
 
   const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');

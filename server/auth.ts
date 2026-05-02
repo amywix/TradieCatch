@@ -269,7 +269,8 @@ export async function requireAuth(
   next();
 }
 
-export const ADMIN_EMAIL = "demo";
+export const ADMIN_EMAIL = "admin@tradiecatch.com";
+export const DEMO_EMAIL = "demo";
 
 /**
  * Operator-only middleware. Run AFTER requireAuth. Confirms the authenticated
@@ -287,6 +288,28 @@ export async function requireAdmin(req: AuthRequest, res: Response, next: NextFu
     next();
   } catch (err) {
     console.error("requireAdmin error:", err);
+    return res.status(500).json({ error: "Authorization check failed" });
+  }
+}
+
+/**
+ * Demo lockdown middleware. Run AFTER requireAuth. Blocks the demo account
+ * from making any state-changing call (settings updates, voice recording
+ * uploads, services updates, etc.). The demo account is read-only — the guys
+ * can browse the app to see how it works, but they can't accidentally edit
+ * the live tradie's configuration.
+ */
+export async function blockDemo(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    if (!req.userId) return res.status(401).json({ error: "Authentication required" });
+    const [user] = await db.select().from(users).where(eq(users.id, req.userId));
+    if (!user) return res.status(401).json({ error: "Authentication required" });
+    if (user.email === DEMO_EMAIL) {
+      return res.status(403).json({ error: "Demo account is read-only", code: "DEMO_READONLY" });
+    }
+    next();
+  } catch (err) {
+    console.error("blockDemo error:", err);
     return res.status(500).json({ error: "Authorization check failed" });
   }
 }

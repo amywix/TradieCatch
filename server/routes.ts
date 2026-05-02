@@ -8,7 +8,7 @@ import { sql as rawSql } from "drizzle-orm";
 import { missedCalls, jobs, settings, users, DEFAULT_SERVICES } from "@shared/schema";
 import { eq, desc, and, not, SQL } from "drizzle-orm";
 import { sendInitialMissedCallSms, handleIncomingReply } from "./sms-conversation";
-import { createTradie, login, getMe, changePassword, acceptTerms, requireAuth, requireAdmin, ADMIN_EMAIL, type AuthRequest } from "./auth";
+import { createTradie, login, getMe, changePassword, acceptTerms, requireAuth, requireAdmin, blockDemo, ADMIN_EMAIL, type AuthRequest } from "./auth";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 function paramId(req: Request | AuthRequest): string {
@@ -581,7 +581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upload voice recording (base64 encoded audio from the app)
-  app.post("/api/settings/voice-recording", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post("/api/settings/voice-recording", requireAuth, blockDemo, async (req: AuthRequest, res: Response) => {
     try {
       const { audioBase64, mimeType } = req.body;
       if (!audioBase64) {
@@ -609,7 +609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete voice recording
-  app.delete("/api/settings/voice-recording", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.delete("/api/settings/voice-recording", requireAuth, blockDemo, async (req: AuthRequest, res: Response) => {
     try {
       await db.update(settings)
         .set({ voiceRecordingData: null, voiceRecordingMimeType: null })
@@ -700,7 +700,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(services);
   });
 
-  app.put("/api/services", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.put("/api/services", requireAuth, blockDemo, async (req: AuthRequest, res: Response) => {
     const { services: newServices } = req.body;
     if (!Array.isArray(newServices) || newServices.length === 0) {
       return res.status(400).json({ error: "Services must be a non-empty array" });
@@ -712,10 +712,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/settings", requireAuth, async (req: AuthRequest, res: Response) => {
     const [row] = await db.select().from(settings).where(eq(settings.userId, req.userId!));
-    res.json(row || { id: "default", userId: req.userId!, businessName: "", autoReplyEnabled: true, services: DEFAULT_SERVICES });
+    if (!row) {
+      return res.json({ id: "default", userId: req.userId!, businessName: "", autoReplyEnabled: true, services: DEFAULT_SERVICES });
+    }
+    // SECURITY: only the operator (admin) sees the raw Twilio credentials.
+    // Tradies and the demo account get the auth token redacted — the SID is
+    // semi-sensitive but useless without the token, so we blank both for
+    // anyone who isn't the admin. The phone number is safe to expose because
+    // it's already public on outbound SMS.
+    const [me] = await db.select().from(users).where(eq(users.id, req.userId!));
+    const isAdmin = me?.email === ADMIN_EMAIL;
+    if (!isAdmin) {
+      return res.json({ ...row, twilioAccountSid: "", twilioAuthToken: "" });
+    }
+    res.json(row);
   });
 
-  app.patch("/api/settings", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.patch("/api/settings", requireAuth, blockDemo, async (req: AuthRequest, res: Response) => {
     // Operator-managed credentials: only the admin (operator) account may write
     // Twilio fields. Tradies who try to PATCH these get 403 — even though the
     // UI hides the editor, we enforce it server-side too.
