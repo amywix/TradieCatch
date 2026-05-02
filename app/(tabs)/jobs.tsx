@@ -8,7 +8,8 @@ import * as Haptics from 'expo-haptics';
 import * as Calendar from 'expo-calendar';
 import Colors from '@/constants/colors';
 import { useData, Job } from '@/lib/data-context';
-import { formatDate, getInitials, getAvatarColor } from '@/lib/helpers';
+import { useAuth } from '@/lib/auth-context';
+import { formatDate, getInitials, getAvatarColor, confirmAction } from '@/lib/helpers';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label: 'Pending', color: Colors.warning, bg: '#FFF8E0' },
@@ -202,6 +203,15 @@ function JobItem({ item, onStatusChange, onDelete }: {
 
 export default function JobsScreen() {
   const insets = useSafeAreaInsets();
+  const { logout } = useAuth();
+  const signOut = useCallback(() => {
+    confirmAction(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      'Sign Out',
+      async () => { await logout(); },
+    );
+  }, [logout]);
   const { jobs, updateExistingJob, removeJob, refreshAll, isLoading } = useData();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed'>('all');
@@ -289,8 +299,13 @@ export default function JobsScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: (Platform.OS === 'web' ? webTopInset : insets.top) + 12 }]}>
-        <Text style={styles.headerTitle}>Jobs</Text>
-        <Text style={styles.headerSubtitle}>{jobs.length} total</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Jobs</Text>
+          <Text style={styles.headerSubtitle}>{jobs.length} total</Text>
+        </View>
+        <Pressable onPress={signOut} style={styles.signOutBtn} hitSlop={8} testID="signout-btn">
+          <Feather name="log-out" size={20} color={Colors.textSecondary} />
+        </Pressable>
       </View>
 
       <View style={styles.filterRow}>
@@ -393,9 +408,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingBottom: 12,
     backgroundColor: Colors.surface,
+  },
+  signOutBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 28,

@@ -167,8 +167,21 @@ function CallItem({ item, onSendAutoSms, onBookJob, onDelete, onViewConvo, sendi
   );
 }
 
+function useSignOut() {
+  const { logout } = useAuth();
+  return useCallback(() => {
+    confirmAction(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      'Sign Out',
+      async () => { await logout(); },
+    );
+  }, [logout]);
+}
+
 export default function CallsScreen() {
   const insets = useSafeAreaInsets();
+  const signOut = useSignOut();
   const { missedCalls, removeCall, refreshAll, isLoading, sendAutoSms } = useData();
   const [refreshing, setRefreshing] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
@@ -244,9 +257,14 @@ export default function CallsScreen() {
             <Text style={styles.headerSubtitle}>{unrepliedCount} unreplied</Text>
           )}
         </View>
-        <Pressable onPress={handleAddCall} style={styles.addBtn} hitSlop={8}>
-          <Ionicons name="add" size={28} color={Colors.accent} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable onPress={handleAddCall} style={styles.addBtn} hitSlop={8} testID="add-call-btn">
+            <Ionicons name="add" size={28} color={Colors.accent} />
+          </Pressable>
+          <Pressable onPress={signOut} style={styles.signOutBtn} hitSlop={8} testID="signout-btn">
+            <Feather name="log-out" size={20} color={Colors.textSecondary} />
+          </Pressable>
+        </View>
       </View>
 
       <FlatList
@@ -305,6 +323,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: Colors.danger,
     marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  signOutBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addBtn: {
     width: 44,
